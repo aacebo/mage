@@ -101,12 +101,12 @@ impl Query {
             qb.push(" AND logs.task_id = ").push_bind(task_id);
         }
 
-        if let Some(levels) = &self.levels {
-            if !levels.is_empty() {
-                qb.push(" AND logs.level = ANY(")
-                    .push_bind(levels.iter().map(|lvl| lvl.as_str()).collect::<Vec<_>>())
-                    .push(")");
-            }
+        if let Some(levels) = &self.levels
+            && !levels.is_empty()
+        {
+            qb.push(" AND logs.level = ANY(")
+                .push_bind(levels.iter().map(|lvl| lvl.as_str()).collect::<Vec<_>>())
+                .push(")");
         }
 
         if let Some(source) = &self.source {

@@ -19,7 +19,7 @@ impl<'a> ArtifactStorage<'a> {
             "SELECT {} FROM artifacts artifact WHERE artifact.id = $1",
             project::artifact("artifact")
         );
-        let artifact = sqlx::query_scalar::<_, Json<types::resources::Artifact>>(&*query)
+        let artifact = sqlx::query_scalar::<_, Json<types::resources::Artifact>>(&query)
             .bind(id)
             .fetch_optional(self.pool)
             .await?;

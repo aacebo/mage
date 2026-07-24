@@ -1,4 +1,4 @@
-pub(crate) fn jsonb_build_object(alias: &str) -> String {
+pub fn jsonb_build_object(alias: &str) -> String {
     let created_by = crate::project::actor_partial("created_by");
 
     format!(
