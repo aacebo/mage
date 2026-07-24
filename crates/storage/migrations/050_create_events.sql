@@ -11,5 +11,27 @@ CREATE TABLE IF NOT EXISTS events (
     created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_events_tenant_cursor
-ON events (tenant_id, created_at, id);
+CREATE INDEX IF NOT EXISTS idx_events_tenant_id
+ON events (tenant_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_events_tenant_key_id
+ON events (tenant_id, key, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_events_trace_id
+ON events (trace_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_events_actor_id
+ON events (actor_id, id DESC)
+WHERE actor_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_events_chat_id
+ON events (chat_id, id DESC)
+WHERE chat_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_events_message_id
+ON events (message_id, id DESC)
+WHERE message_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_events_task_id
+ON events (task_id, id DESC)
+WHERE task_id IS NOT NULL;

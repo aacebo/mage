@@ -10,6 +10,15 @@ CREATE TABLE IF NOT EXISTS annotations (
     created_at  TIMESTAMPTZ         NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_annotations_type       ON annotations(type);
-CREATE INDEX IF NOT EXISTS idx_annotations_label      ON annotations(label);
-CREATE INDEX IF NOT EXISTS idx_annotations_created_at ON annotations(created_at);
+CREATE INDEX IF NOT EXISTS idx_annotations_message_id
+ON annotations(message_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_annotations_task_id
+ON annotations(task_id, id DESC)
+WHERE task_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_annotations_type_id
+ON annotations(type, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_annotations_label_id
+ON annotations(label, id DESC);

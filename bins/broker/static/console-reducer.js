@@ -17,8 +17,7 @@
     }
 
     function compareEvents(left, right) {
-        const time = String(left.created_at).localeCompare(String(right.created_at));
-        return time || String(left.id).localeCompare(String(right.id));
+        return String(left.id).localeCompare(String(right.id));
     }
 
     function reduceEvent(state, event) {
@@ -246,14 +245,13 @@
 
     function latestCursor(state) {
         const event = state.events[state.events.length - 1];
-        return event ? { created_at: event.created_at, id: event.id } : null;
+        return event?.id || null;
     }
 
     function cursorAtOrAfter(cursor, target) {
         if (!target) return true;
         if (!cursor) return false;
-        if (cursor.created_at !== target.created_at) return cursor.created_at > target.created_at;
-        return cursor.id >= target.id;
+        return cursor >= target;
     }
 
     return {

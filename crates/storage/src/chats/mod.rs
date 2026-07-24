@@ -2,7 +2,10 @@ use error::Result;
 use sqlx::PgPool;
 use sqlx::types::Json;
 
-use crate::project;
+use crate::QueryResult;
+
+pub mod project;
+pub mod query;
 
 pub struct ChatStorage<'a> {
     pool: &'a PgPool,
@@ -14,13 +17,20 @@ impl<'a> ChatStorage<'a> {
     }
 
     pub async fn get_by_id(&self, id: uuid::Uuid) -> Result<Option<types::chats::Chat>> {
-        let query = format!("SELECT {} FROM chats chat WHERE chat.id = $1", project::chat("chat"));
+        let query = format!(
+            "SELECT {} FROM chats WHERE chats.id = $1",
+            project::jsonb_build_object("chats")
+        );
         let chat = sqlx::query_scalar::<_, Json<types::chats::Chat>>(&query)
             .bind(id)
             .fetch_optional(self.pool)
             .await?;
 
         Ok(chat.map(|Json(chat)| chat))
+    }
+
+    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::chats::Chat>> {
+        query.exec(self.pool).await
     }
 
     pub async fn get_open_for_actor(
@@ -32,18 +42,18 @@ impl<'a> ChatStorage<'a> {
         let query = format!(
             r#"
             SELECT {}
-            FROM chats chat
-            WHERE chat.id = $1
-              AND chat.tenant_id = $2
-              AND chat.closed_at IS NULL
+            FROM chats
+            WHERE chats.id = $1
+              AND chats.tenant_id = $2
+              AND chats.closed_at IS NULL
               AND EXISTS (
                   SELECT 1
-                  FROM chat_actors member
-                  WHERE member.chat_id = chat.id
-                    AND member.actor_id = $3
+                  FROM chat_actors
+                  WHERE chat_actors.chat_id = chats.id
+                    AND chat_actors.actor_id = $3
               )
             "#,
-            project::chat("chat")
+            project::jsonb_build_object("chats")
         );
 
         let chat = sqlx::query_scalar::<_, Json<types::chats::Chat>>(&query)

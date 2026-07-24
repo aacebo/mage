@@ -25,5 +25,11 @@ CREATE UNIQUE INDEX idx_actors_tenant_external_id
 ON actors (tenant_id, external_id)
 WHERE external_id IS NOT NULL;
 
+CREATE INDEX IF NOT EXISTS idx_actors_tenant_id
+ON actors (tenant_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_actors_tenant_role_id
+ON actors (tenant_id, role, id DESC);
+
 CREATE INDEX IF NOT EXISTS idx_actors_embedding
 ON actors USING hnsw (embedding vector_cosine_ops);

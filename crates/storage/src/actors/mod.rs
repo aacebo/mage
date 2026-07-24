@@ -3,7 +3,10 @@ use pgvector::Vector;
 use sqlx::PgPool;
 use sqlx::types::Json;
 
-use crate::{SearchOptions, SearchResult, project, search};
+use crate::{QueryResult, SearchOptions, SearchResult, search};
+
+pub mod project;
+pub mod query;
 
 pub struct ActorStorage<'a> {
     pool: &'a PgPool,
@@ -15,7 +18,10 @@ impl<'a> ActorStorage<'a> {
     }
 
     pub async fn get_by_id(&self, id: uuid::Uuid) -> Result<Option<types::actors::Actor>> {
-        let query = format!("SELECT {} FROM actors actor WHERE actor.id = $1", project::actor("actor"));
+        let query = format!(
+            "SELECT {} FROM actors WHERE actors.id = $1",
+            project::jsonb_build_object("actors")
+        );
         let actor = sqlx::query_scalar::<_, Json<types::actors::Actor>>(&query)
             .bind(id)
             .fetch_optional(self.pool)
@@ -24,13 +30,17 @@ impl<'a> ActorStorage<'a> {
         Ok(actor.map(|Json(actor)| actor))
     }
 
+    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::actors::Actor>> {
+        query.exec(self.pool).await
+    }
+
     pub async fn get_by_external_id(&self, tenant_id: uuid::Uuid, external_id: String) -> Result<Option<types::actors::Actor>> {
         let query = format!(
             r#"SELECT {}
-            FROM actors actor
-            WHERE actor.tenant_id = $1
-            AND actor.external_id = $2"#,
-            project::actor("actor"),
+            FROM actors
+            WHERE actors.tenant_id = $1
+            AND actors.external_id = $2"#,
+            project::jsonb_build_object("actors"),
         );
 
         let actor = sqlx::query_scalar::<_, Json<types::actors::Actor>>(&query)
@@ -59,17 +69,17 @@ impl<'a> ActorStorage<'a> {
     ) -> Result<Vec<SearchResult<types::actors::Actor>>> {
         let role = options.role.map(types::actors::Role::as_str);
         let (embedding, limit, min_similarity) = search::prepare(embedding, options)?;
-        let projection = project::actor("actor");
+        let projection = project::jsonb_build_object("actors");
         let query = format!(
             r#"
             WITH nearest AS MATERIALIZED (
                 SELECT {projection} AS entity,
-                       actor.embedding <=> $2 AS distance
-                FROM actors actor
-                WHERE actor.tenant_id = $1
-                  AND actor.embedding IS NOT NULL
-                  AND ($5::TEXT IS NULL OR actor.role = $5)
-                ORDER BY actor.embedding <=> $2
+                       actors.embedding <=> $2 AS distance
+                FROM actors
+                WHERE actors.tenant_id = $1
+                  AND actors.embedding IS NOT NULL
+                  AND ($5::TEXT IS NULL OR actors.role = $5)
+                ORDER BY actors.embedding <=> $2
                 LIMIT $3
             )
             SELECT entity, 1.0 - distance AS similarity

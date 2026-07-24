@@ -3,7 +3,10 @@ use pgvector::Vector;
 use sqlx::PgPool;
 use sqlx::types::Json;
 
-use crate::{SearchOptions, SearchResult, project, search};
+use crate::{QueryResult, SearchOptions, SearchResult, search};
+
+pub mod project;
+pub mod query;
 
 pub struct ArtifactStorage<'a> {
     pool: &'a PgPool,
@@ -16,8 +19,8 @@ impl<'a> ArtifactStorage<'a> {
 
     pub async fn get_by_id(&self, id: uuid::Uuid) -> Result<Option<types::resources::Artifact>> {
         let query = format!(
-            "SELECT {} FROM artifacts artifact WHERE artifact.id = $1",
-            project::artifact("artifact")
+            "SELECT {} FROM artifacts WHERE artifacts.id = $1",
+            project::jsonb_build_object("artifacts")
         );
         let artifact = sqlx::query_scalar::<_, Json<types::resources::Artifact>>(&query)
             .bind(id)
@@ -27,22 +30,8 @@ impl<'a> ArtifactStorage<'a> {
         Ok(artifact.map(|Json(artifact)| artifact))
     }
 
-    pub async fn get_by_message(&self, message_id: uuid::Uuid) -> Result<Vec<types::resources::Artifact>> {
-        let query = format!(
-            r#"
-            SELECT {}
-            FROM artifacts artifact
-            WHERE artifact.message_id = $1
-            ORDER BY artifact.created_at, artifact.id
-            "#,
-            project::artifact("artifact")
-        );
-        let artifacts = sqlx::query_scalar::<_, Json<types::resources::Artifact>>(&query)
-            .bind(message_id)
-            .fetch_all(self.pool)
-            .await?;
-
-        Ok(artifacts.into_iter().map(|Json(artifact)| artifact).collect())
+    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::resources::Artifact>> {
+        query.exec(self.pool).await
     }
 
     pub async fn search(
@@ -52,21 +41,21 @@ impl<'a> ArtifactStorage<'a> {
         options: SearchOptions,
     ) -> Result<Vec<SearchResult<types::resources::Artifact>>> {
         let (embedding, limit, min_similarity) = search::prepare(embedding, options)?;
-        let projection = project::artifact("artifact");
+        let projection = project::jsonb_build_object("artifacts");
         let query = format!(
             r#"
             WITH nearest AS MATERIALIZED (
                 SELECT {projection} AS entity,
-                       artifact.embedding <=> $2 AS distance
-                FROM artifacts artifact
-                WHERE artifact.embedding IS NOT NULL
+                       artifacts.embedding <=> $2 AS distance
+                FROM artifacts
+                WHERE artifacts.embedding IS NOT NULL
                   AND EXISTS (
                       SELECT 1
-                      FROM chats chat_scope
-                      WHERE chat_scope.id = artifact.chat_id
-                        AND chat_scope.tenant_id = $1
+                      FROM chats
+                      WHERE chats.id = artifacts.chat_id
+                        AND chats.tenant_id = $1
                   )
-                ORDER BY artifact.embedding <=> $2
+                ORDER BY artifacts.embedding <=> $2
                 LIMIT $3
             )
             SELECT entity, 1.0 - distance AS similarity

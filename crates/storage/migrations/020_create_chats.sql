@@ -20,3 +20,9 @@ CREATE TABLE IF NOT EXISTS chat_actors (
 
     PRIMARY KEY (chat_id, actor_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_chats_tenant_id
+ON chats (tenant_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_chats_created_by_id
+ON chats (created_by_id, id DESC);

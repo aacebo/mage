@@ -2,7 +2,10 @@ use error::Result;
 use sqlx::PgPool;
 use sqlx::types::Json;
 
-use crate::project;
+use crate::QueryResult;
+
+pub mod project;
+pub mod query;
 
 pub struct AnnotationStorage<'a> {
     pool: &'a PgPool,
@@ -15,8 +18,8 @@ impl<'a> AnnotationStorage<'a> {
 
     pub async fn get_by_id(&self, id: uuid::Uuid) -> Result<Option<types::resources::Annotation>> {
         let query = format!(
-            "SELECT {} FROM annotations annotation WHERE annotation.id = $1",
-            project::annotation("annotation")
+            "SELECT {} FROM annotations WHERE annotations.id = $1",
+            project::jsonb_build_object("annotations")
         );
         let annotation = sqlx::query_scalar::<_, Json<types::resources::Annotation>>(&query)
             .bind(id)
@@ -26,22 +29,8 @@ impl<'a> AnnotationStorage<'a> {
         Ok(annotation.map(|Json(annotation)| annotation))
     }
 
-    pub async fn get_by_message(&self, message_id: uuid::Uuid) -> Result<Vec<types::resources::Annotation>> {
-        let query = format!(
-            r#"
-            SELECT {}
-            FROM annotations annotation
-            WHERE annotation.message_id = $1
-            ORDER BY annotation.score DESC, annotation.created_at, annotation.id
-            "#,
-            project::annotation("annotation")
-        );
-        let annotations = sqlx::query_scalar::<_, Json<types::resources::Annotation>>(&query)
-            .bind(message_id)
-            .fetch_all(self.pool)
-            .await?;
-
-        Ok(annotations.into_iter().map(|Json(annotation)| annotation).collect())
+    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::resources::Annotation>> {
+        query.exec(self.pool).await
     }
 
     pub async fn create(

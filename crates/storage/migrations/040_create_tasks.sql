@@ -22,3 +22,27 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 ALTER TABLE tasks
 ADD COLUMN parent_id UUID REFERENCES tasks(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_tasks_tenant_id
+ON tasks (tenant_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_tenant_status_id
+ON tasks (tenant_id, status, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_trace_id
+ON tasks (trace_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_parent_id
+ON tasks (parent_id, id DESC)
+WHERE parent_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_tasks_chat_id
+ON tasks (chat_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_message_id
+ON tasks (message_id, id DESC)
+WHERE message_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_tasks_agent_id
+ON tasks (agent_id, id DESC)
+WHERE agent_id IS NOT NULL;

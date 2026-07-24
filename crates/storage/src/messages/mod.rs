@@ -3,7 +3,10 @@ use pgvector::Vector;
 use sqlx::PgPool;
 use sqlx::types::Json;
 
-use crate::{SearchOptions, SearchResult, project, search};
+use crate::{QueryResult, SearchOptions, SearchResult, search};
+
+pub mod project;
+pub mod query;
 
 pub struct MessageStorage<'a> {
     pool: &'a PgPool,
@@ -16,8 +19,8 @@ impl<'a> MessageStorage<'a> {
 
     pub async fn get_by_id(&self, id: uuid::Uuid) -> Result<Option<types::chats::Message>> {
         let query = format!(
-            "SELECT {} FROM messages message WHERE message.id = $1",
-            project::message("message")
+            "SELECT {} FROM messages WHERE messages.id = $1",
+            project::jsonb_build_object("messages")
         );
 
         let message = sqlx::query_scalar::<_, Json<types::chats::Message>>(&query)
@@ -28,15 +31,19 @@ impl<'a> MessageStorage<'a> {
         Ok(message.map(|Json(message)| message))
     }
 
+    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::chats::Message>> {
+        query.exec(self.pool).await
+    }
+
     pub async fn get_by_task(&self, task_id: uuid::Uuid) -> Result<Option<types::chats::Message>> {
         let query = format!(
             r#"
             SELECT {}
-            FROM messages message
-            JOIN tasks task ON task.message_id = message.id
-            WHERE task.id = $1
+            FROM messages
+            JOIN tasks ON tasks.message_id = messages.id
+            WHERE tasks.id = $1
             "#,
-            project::message("message")
+            project::jsonb_build_object("messages")
         );
 
         let message = sqlx::query_scalar::<_, Json<types::chats::Message>>(&query)
@@ -54,21 +61,21 @@ impl<'a> MessageStorage<'a> {
         options: SearchOptions,
     ) -> Result<Vec<SearchResult<types::chats::Message>>> {
         let (embedding, limit, min_similarity) = search::prepare(embedding, options)?;
-        let projection = project::message("message");
+        let projection = project::jsonb_build_object("messages");
         let query = format!(
             r#"
             WITH nearest AS MATERIALIZED (
                 SELECT {projection} AS entity,
-                       message.embedding <=> $2 AS distance
-                FROM messages message
-                WHERE message.embedding IS NOT NULL
+                       messages.embedding <=> $2 AS distance
+                FROM messages
+                WHERE messages.embedding IS NOT NULL
                   AND EXISTS (
                       SELECT 1
-                      FROM chats chat_scope
-                      WHERE chat_scope.id = message.chat_id
-                        AND chat_scope.tenant_id = $1
+                      FROM chats
+                      WHERE chats.id = messages.chat_id
+                        AND chats.tenant_id = $1
                   )
-                ORDER BY message.embedding <=> $2
+                ORDER BY messages.embedding <=> $2
                 LIMIT $3
             )
             SELECT entity, 1.0 - distance AS similarity

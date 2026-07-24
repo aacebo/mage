@@ -130,8 +130,7 @@
                 clearTimeout(this.reconnectTimer);
                 const cursor = Reducer.latestCursor(state);
                 const url = websocketUrl("/console/connect", {
-                    after_at: cursor?.created_at,
-                    after_id: cursor?.id,
+                    after_id: cursor,
                 });
                 this.streamStatus = "connecting";
                 const socket = new WebSocket(url);

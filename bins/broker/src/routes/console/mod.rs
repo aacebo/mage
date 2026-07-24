@@ -9,7 +9,7 @@ use crate::RequestContext;
 #[template(path = "console/index.html")]
 struct ConsoleTemplate {
     tenant_id: uuid::Uuid,
-    high_water_cursor: Option<storage::EventCursor>,
+    high_water_cursor: Option<uuid::Uuid>,
     reducer_version: u32,
 }
 
@@ -20,9 +20,17 @@ pub fn configure(config: &mut web::ServiceConfig) {
 #[get("")]
 async fn page(ctx: RequestContext) -> error::Result<HttpResponse> {
     let tenant_id = ctx.console().tenant_id.unwrap();
+    let high_water_cursor = ctx
+        .storage()
+        .events()
+        .get(storage::events::query::new().tenant(tenant_id).limit(1))
+        .await?
+        .items
+        .first()
+        .map(|event| event.id);
     let template = ConsoleTemplate {
         tenant_id,
-        high_water_cursor: ctx.storage().events().latest_cursor(tenant_id).await?,
+        high_water_cursor,
         reducer_version: 2,
     };
 

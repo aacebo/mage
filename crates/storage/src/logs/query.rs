@@ -140,14 +140,7 @@ impl Query {
             .map(|sqlx::types::Json(log)| log)
             .collect::<Vec<_>>();
 
-        let mut result = QueryResult { next: None, items: rows };
-
-        if result.items.len() > self.limit {
-            result.items.pop();
-            result.next = result.items.last().map(|v| v.id);
-        }
-
-        Ok(result)
+        Ok(crate::paginate(rows, self.limit, |log| log.id))
     }
 }
 

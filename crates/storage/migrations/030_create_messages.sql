@@ -12,5 +12,11 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_created_at
 ON messages(created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_messages_chat_id
+ON messages(chat_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_messages_created_by_id
+ON messages(created_by_id, id DESC);
+
 CREATE INDEX IF NOT EXISTS idx_messages_embedding
 ON messages USING hnsw (embedding vector_cosine_ops);

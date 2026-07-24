@@ -2,7 +2,10 @@ use error::Result;
 use sqlx::PgPool;
 use sqlx::types::Json;
 
-use crate::project;
+use crate::QueryResult;
+
+pub mod project;
+pub mod query;
 
 pub struct TaskStorage<'a> {
     pool: &'a PgPool,
@@ -14,7 +17,10 @@ impl<'a> TaskStorage<'a> {
     }
 
     pub async fn get_by_id(&self, id: uuid::Uuid) -> Result<Option<types::tasks::Task>> {
-        let query = format!("SELECT {} FROM tasks task WHERE task.id = $1", project::task("task"));
+        let query = format!(
+            "SELECT {} FROM tasks WHERE tasks.id = $1",
+            project::jsonb_build_object("tasks")
+        );
         let task = sqlx::query_scalar::<_, Json<types::tasks::Task>>(&query)
             .bind(id)
             .fetch_optional(self.pool)
@@ -23,23 +29,8 @@ impl<'a> TaskStorage<'a> {
         Ok(task.map(|Json(task)| task))
     }
 
-    pub async fn get_by_message(&self, message_id: uuid::Uuid) -> Result<Vec<types::tasks::Task>> {
-        let query = format!(
-            r#"
-            SELECT {}
-            FROM tasks task
-            WHERE task.message_id = $1
-            ORDER BY task.created_at DESC, task.id
-            "#,
-            project::task("task")
-        );
-
-        let tasks = sqlx::query_scalar::<_, Json<types::tasks::Task>>(&query)
-            .bind(message_id)
-            .fetch_all(self.pool)
-            .await?;
-
-        Ok(tasks.into_iter().map(|Json(task)| task).collect())
+    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::tasks::Task>> {
+        query.exec(self.pool).await
     }
 
     #[allow(clippy::too_many_arguments)]

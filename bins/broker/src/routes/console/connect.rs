@@ -8,23 +8,12 @@ use tracing::Instrument;
 
 use crate::RequestContext;
 
-const REPLAY_BATCH_SIZE: u32 = 250;
+const REPLAY_BATCH_SIZE: usize = 100;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(20);
 
 #[derive(Debug, serde::Deserialize)]
 struct ReplayQuery {
-    after_at: Option<chrono::DateTime<chrono::Utc>>,
     after_id: Option<uuid::Uuid>,
-}
-
-impl ReplayQuery {
-    fn cursor(&self) -> error::Result<Option<storage::EventCursor>> {
-        match (self.after_at, self.after_id) {
-            (Some(created_at), Some(id)) => Ok(Some(storage::EventCursor { created_at, id })),
-            (None, None) => Ok(None),
-            _ => Err(error::bad_request("after_at and after_id must be provided together")),
-        }
-    }
 }
 
 #[get("/connect")]
@@ -35,15 +24,14 @@ pub async fn connect(
     query: web::Query<ReplayQuery>,
 ) -> error::Result<HttpResponse> {
     let tenant_id = ctx.console().tenant_id.unwrap();
-    let cursor = query.cursor()?;
+    let cursor = query.after_id;
     let (response, session, stream) = actix_ws::handle(&req, payload)?;
     let stream = stream.aggregate_continuations().max_continuation_size(64 * 1024);
     let span = tracing::info_span!(
         parent: ctx.span(),
         "console.connection",
         tenant_id = %tenant_id,
-        replay_after_at = ?cursor.map(|cursor| cursor.created_at),
-        replay_after_id = ?cursor.map(|cursor| cursor.id),
+        replay_after_id = ?cursor,
     );
 
     rt::spawn(run_stream(ctx, tenant_id, cursor, session, stream).instrument(span));
@@ -53,7 +41,7 @@ pub async fn connect(
 async fn run_stream(
     ctx: RequestContext,
     tenant_id: uuid::Uuid,
-    cursor: Option<storage::EventCursor>,
+    cursor: Option<uuid::Uuid>,
     session: actix_ws::Session,
     stream: actix_ws::AggregatedMessageStream,
 ) {
@@ -80,7 +68,7 @@ async fn run_stream(
 async fn run_event_stream(
     ctx: &RequestContext,
     tenant_id: uuid::Uuid,
-    mut cursor: Option<storage::EventCursor>,
+    mut cursor: Option<uuid::Uuid>,
     mut session: actix_ws::Session,
     mut stream: actix_ws::AggregatedMessageStream,
     events: &mut amqp::SocketConsumer<'_>,
@@ -90,8 +78,16 @@ async fn run_event_stream(
     tracing::debug!("starting console event replay");
 
     loop {
-        let events = match ctx.storage().events().list_after(tenant_id, cursor, REPLAY_BATCH_SIZE).await {
-            Ok(events) => events,
+        let query = storage::events::query::new()
+            .tenant(tenant_id)
+            .limit(REPLAY_BATCH_SIZE)
+            .ascending();
+        let query = match cursor {
+            Some(cursor) => query.cursor(cursor),
+            None => query,
+        };
+        let result = match ctx.storage().events().get(query).await {
+            Ok(result) => result,
             Err(error) => {
                 tracing::error!(%error, "failed to replay console events");
                 close(session, CloseCode::Error, "event replay failed").await;
@@ -99,10 +95,10 @@ async fn run_event_stream(
             }
         };
 
-        let count = events.len();
+        let count = result.items.len();
 
-        for event in events {
-            cursor = Some(storage::EventCursor::from(&event));
+        for event in result.items {
+            cursor = Some(event.id);
             sent.insert(event.id);
 
             if let Err(error) = emit(&mut session, &event).await {
@@ -113,7 +109,7 @@ async fn run_event_stream(
             replayed += 1;
         }
 
-        if count < REPLAY_BATCH_SIZE as usize {
+        if count < REPLAY_BATCH_SIZE {
             break;
         }
     }
