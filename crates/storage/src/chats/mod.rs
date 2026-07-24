@@ -21,7 +21,7 @@ impl<'a> ChatStorage<'a> {
             "SELECT {} FROM chats WHERE chats.id = $1",
             project::jsonb_build_object("chats")
         );
-        let chat = sqlx::query_scalar::<_, Json<types::chats::Chat>>(&query)
+        let chat = sqlx::query_scalar::<_, Json<types::chats::Chat>>(sqlx::AssertSqlSafe(query))
             .bind(id)
             .fetch_optional(self.pool)
             .await?;
@@ -56,7 +56,7 @@ impl<'a> ChatStorage<'a> {
             project::jsonb_build_object("chats")
         );
 
-        let chat = sqlx::query_scalar::<_, Json<types::chats::Chat>>(&query)
+        let chat = sqlx::query_scalar::<_, Json<types::chats::Chat>>(sqlx::AssertSqlSafe(query))
             .bind(id)
             .bind(tenant_id)
             .bind(actor_id)

@@ -18,7 +18,7 @@ impl<'a> LogStorage<'a> {
 
     pub async fn get_by_id(&self, id: uuid::Uuid) -> Result<Option<types::logs::Log>> {
         let query = format!("SELECT {} FROM logs WHERE id = $1", project::jsonb_build_object("logs"));
-        let log = sqlx::query_scalar::<_, Json<types::logs::Log>>(&query)
+        let log = sqlx::query_scalar::<_, Json<types::logs::Log>>(sqlx::AssertSqlSafe(query))
             .bind(id)
             .fetch_optional(self.pool)
             .await?;

@@ -22,7 +22,7 @@ impl<'a> ActorStorage<'a> {
             "SELECT {} FROM actors WHERE actors.id = $1",
             project::jsonb_build_object("actors")
         );
-        let actor = sqlx::query_scalar::<_, Json<types::actors::Actor>>(&query)
+        let actor = sqlx::query_scalar::<_, Json<types::actors::Actor>>(sqlx::AssertSqlSafe(query))
             .bind(id)
             .fetch_optional(self.pool)
             .await?;
@@ -43,7 +43,7 @@ impl<'a> ActorStorage<'a> {
             project::jsonb_build_object("actors"),
         );
 
-        let actor = sqlx::query_scalar::<_, Json<types::actors::Actor>>(&query)
+        let actor = sqlx::query_scalar::<_, Json<types::actors::Actor>>(sqlx::AssertSqlSafe(query))
             .bind(tenant_id)
             .bind(external_id)
             .fetch_optional(self.pool)
@@ -92,7 +92,7 @@ impl<'a> ActorStorage<'a> {
         sqlx::query("SET LOCAL hnsw.iterative_scan = strict_order")
             .execute(&mut *tx)
             .await?;
-        let rows = sqlx::query_as::<_, (Json<types::actors::Actor>, f64)>(&query)
+        let rows = sqlx::query_as::<_, (Json<types::actors::Actor>, f64)>(sqlx::AssertSqlSafe(query))
             .bind(tenant_id)
             .bind(embedding)
             .bind(limit)

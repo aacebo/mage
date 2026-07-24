@@ -22,7 +22,7 @@ impl<'a> EventStorage<'a> {
             project::jsonb_build_object("events")
         );
 
-        let event = sqlx::query_scalar::<_, Json<types::events::Event>>(&query)
+        let event = sqlx::query_scalar::<_, Json<types::events::Event>>(sqlx::AssertSqlSafe(query))
             .bind(id)
             .fetch_optional(self.pool)
             .await?;

@@ -21,7 +21,7 @@ impl<'a> TaskStorage<'a> {
             "SELECT {} FROM tasks WHERE tasks.id = $1",
             project::jsonb_build_object("tasks")
         );
-        let task = sqlx::query_scalar::<_, Json<types::tasks::Task>>(&query)
+        let task = sqlx::query_scalar::<_, Json<types::tasks::Task>>(sqlx::AssertSqlSafe(query))
             .bind(id)
             .fetch_optional(self.pool)
             .await?;

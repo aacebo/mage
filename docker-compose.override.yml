@@ -9,7 +9,7 @@ services:
     volumes:
       - .:/app
       - broker-target:/app/target
-      - cargo-registry:/usr/local/cargo/registry
+      - broker-cargo-registry:/usr/local/cargo/registry
     command: cargo run --release --package broker
 
   worker:
@@ -21,11 +21,12 @@ services:
     volumes:
       - .:/app
       - worker-target:/app/target
-      - cargo-registry:/usr/local/cargo/registry
+      - worker-cargo-registry:/usr/local/cargo/registry
       - ./.cache:/app/.cache
     command: cargo run --release --package worker
 
 volumes:
   broker-target:
   worker-target:
-  cargo-registry:
+  broker-cargo-registry:
+  worker-cargo-registry:

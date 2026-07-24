@@ -23,7 +23,7 @@ impl<'a> MessageStorage<'a> {
             project::jsonb_build_object("messages")
         );
 
-        let message = sqlx::query_scalar::<_, Json<types::chats::Message>>(&query)
+        let message = sqlx::query_scalar::<_, Json<types::chats::Message>>(sqlx::AssertSqlSafe(query))
             .bind(id)
             .fetch_optional(self.pool)
             .await?;
@@ -46,7 +46,7 @@ impl<'a> MessageStorage<'a> {
             project::jsonb_build_object("messages")
         );
 
-        let message = sqlx::query_scalar::<_, Json<types::chats::Message>>(&query)
+        let message = sqlx::query_scalar::<_, Json<types::chats::Message>>(sqlx::AssertSqlSafe(query))
             .bind(task_id)
             .fetch_optional(self.pool)
             .await?;
@@ -88,7 +88,7 @@ impl<'a> MessageStorage<'a> {
         sqlx::query("SET LOCAL hnsw.iterative_scan = strict_order")
             .execute(&mut *tx)
             .await?;
-        let rows = sqlx::query_as::<_, (Json<types::chats::Message>, f64)>(&query)
+        let rows = sqlx::query_as::<_, (Json<types::chats::Message>, f64)>(sqlx::AssertSqlSafe(query))
             .bind(tenant_id)
             .bind(embedding)
             .bind(limit)

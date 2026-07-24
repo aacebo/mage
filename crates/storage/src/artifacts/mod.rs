@@ -22,7 +22,7 @@ impl<'a> ArtifactStorage<'a> {
             "SELECT {} FROM artifacts WHERE artifacts.id = $1",
             project::jsonb_build_object("artifacts")
         );
-        let artifact = sqlx::query_scalar::<_, Json<types::resources::Artifact>>(&query)
+        let artifact = sqlx::query_scalar::<_, Json<types::resources::Artifact>>(sqlx::AssertSqlSafe(query))
             .bind(id)
             .fetch_optional(self.pool)
             .await?;
@@ -68,7 +68,7 @@ impl<'a> ArtifactStorage<'a> {
         sqlx::query("SET LOCAL hnsw.iterative_scan = strict_order")
             .execute(&mut *tx)
             .await?;
-        let rows = sqlx::query_as::<_, (Json<types::resources::Artifact>, f64)>(&query)
+        let rows = sqlx::query_as::<_, (Json<types::resources::Artifact>, f64)>(sqlx::AssertSqlSafe(query))
             .bind(tenant_id)
             .bind(embedding)
             .bind(limit)

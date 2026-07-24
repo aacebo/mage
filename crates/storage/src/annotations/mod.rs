@@ -21,7 +21,7 @@ impl<'a> AnnotationStorage<'a> {
             "SELECT {} FROM annotations WHERE annotations.id = $1",
             project::jsonb_build_object("annotations")
         );
-        let annotation = sqlx::query_scalar::<_, Json<types::resources::Annotation>>(&query)
+        let annotation = sqlx::query_scalar::<_, Json<types::resources::Annotation>>(sqlx::AssertSqlSafe(query))
             .bind(id)
             .fetch_optional(self.pool)
             .await?;
