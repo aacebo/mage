@@ -7,8 +7,12 @@ CREATE TABLE IF NOT EXISTS logs (
     source          TEXT        NOT NULL,
     message         TEXT        NOT NULL,
     fields          JSONB       NOT NULL DEFAULT '{}',
-    created_by_id   UUID        REFERENCES actors(id) ON DELETE CASCADE,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_by_id   UUID        NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    FOREIGN KEY (tenant_id, created_by_id)
+        REFERENCES actors (tenant_id, id)
+        ON DELETE CASCADE
 );
 
 CREATE INDEX idx_logs_trace_id
