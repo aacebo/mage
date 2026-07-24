@@ -11,17 +11,39 @@ pub struct Query {
     #[validate(minimum = 1)]
     #[validate(maximum = 100)]
     pub limit: usize,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<uuid::Uuid>,
+
+    #[serde(default)]
     pub order: Order,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub trace_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub actor_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub chat_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub message_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub task_id: Option<uuid::Uuid>,
+
     #[validate(unique_items)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub keys: Option<Vec<String>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub before: Option<chrono::DateTime<chrono::Utc>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub after: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -160,7 +182,7 @@ impl Query {
             .map(|sqlx::types::Json(event)| event)
             .collect();
 
-        Ok(crate::paginate(rows, self.limit, |event| event.id))
+        Ok(crate::result(rows, self.limit, |event| event.id))
     }
 }
 

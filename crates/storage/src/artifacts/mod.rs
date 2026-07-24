@@ -7,6 +7,7 @@ use crate::{QueryResult, SearchOptions, SearchResult, search};
 
 pub mod project;
 pub mod query;
+pub use query::Query;
 
 pub struct ArtifactStorage<'a> {
     pool: &'a PgPool,
@@ -30,7 +31,7 @@ impl<'a> ArtifactStorage<'a> {
         Ok(artifact.map(|Json(artifact)| artifact))
     }
 
-    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::resources::Artifact>> {
+    pub async fn get(&self, query: Query) -> Result<QueryResult<types::resources::Artifact>> {
         query.exec(self.pool).await
     }
 

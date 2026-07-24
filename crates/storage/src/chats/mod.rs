@@ -6,6 +6,7 @@ use crate::QueryResult;
 
 pub mod project;
 pub mod query;
+pub use query::Query;
 
 pub struct ChatStorage<'a> {
     pool: &'a PgPool,
@@ -29,7 +30,7 @@ impl<'a> ChatStorage<'a> {
         Ok(chat.map(|Json(chat)| chat))
     }
 
-    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::chats::Chat>> {
+    pub async fn get(&self, query: Query) -> Result<QueryResult<types::chats::Chat>> {
         query.exec(self.pool).await
     }
 

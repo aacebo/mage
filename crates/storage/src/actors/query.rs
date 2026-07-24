@@ -11,11 +11,23 @@ pub struct Query {
     #[validate(minimum = 1)]
     #[validate(maximum = 100)]
     pub limit: usize,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub external_id: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub roles: Option<Vec<types::actors::Role>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub before: Option<chrono::DateTime<chrono::Utc>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub after: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -103,7 +115,7 @@ impl Query {
             .map(|sqlx::types::Json(actor)| actor)
             .collect();
 
-        Ok(crate::paginate(rows, self.limit, |actor| actor.id))
+        Ok(crate::result(rows, self.limit, |actor| actor.id))
     }
 }
 

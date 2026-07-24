@@ -6,6 +6,7 @@ use crate::QueryResult;
 
 pub mod project;
 pub mod query;
+pub use query::Query;
 
 pub struct AnnotationStorage<'a> {
     pool: &'a PgPool,
@@ -29,7 +30,7 @@ impl<'a> AnnotationStorage<'a> {
         Ok(annotation.map(|Json(annotation)| annotation))
     }
 
-    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::resources::Annotation>> {
+    pub async fn get(&self, query: Query) -> Result<QueryResult<types::resources::Annotation>> {
         query.exec(self.pool).await
     }
 

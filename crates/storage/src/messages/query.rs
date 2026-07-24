@@ -11,10 +11,20 @@ pub struct Query {
     #[validate(minimum = 1)]
     #[validate(maximum = 100)]
     pub limit: usize,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub chat_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub before: Option<chrono::DateTime<chrono::Utc>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub after: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -89,7 +99,7 @@ impl Query {
             .map(|sqlx::types::Json(message)| message)
             .collect();
 
-        Ok(crate::paginate(rows, self.limit, |message| message.id))
+        Ok(crate::result(rows, self.limit, |message| message.id))
     }
 }
 

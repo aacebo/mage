@@ -11,15 +11,35 @@ pub struct Query {
     #[validate(minimum = 1)]
     #[validate(maximum = 100)]
     pub limit: usize,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub trace_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub chat_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub message_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub statuses: Option<Vec<types::tasks::TaskStatus>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub before: Option<chrono::DateTime<chrono::Utc>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub after: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -143,7 +163,7 @@ impl Query {
             .map(|sqlx::types::Json(task)| task)
             .collect();
 
-        Ok(crate::paginate(rows, self.limit, |task| task.id))
+        Ok(crate::result(rows, self.limit, |task| task.id))
     }
 }
 

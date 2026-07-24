@@ -8,6 +8,8 @@ use crate::{QueryResult, SearchOptions, SearchResult, search};
 pub mod project;
 pub mod query;
 
+pub use query::Query;
+
 pub struct ActorStorage<'a> {
     pool: &'a PgPool,
 }
@@ -30,7 +32,7 @@ impl<'a> ActorStorage<'a> {
         Ok(actor.map(|Json(actor)| actor))
     }
 
-    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::actors::Actor>> {
+    pub async fn get(&self, query: Query) -> Result<QueryResult<types::actors::Actor>> {
         query.exec(self.pool).await
     }
 

@@ -6,6 +6,7 @@ use crate::QueryResult;
 
 pub mod project;
 pub mod query;
+pub use query::Query;
 
 pub struct TaskStorage<'a> {
     pool: &'a PgPool,
@@ -29,7 +30,7 @@ impl<'a> TaskStorage<'a> {
         Ok(task.map(|Json(task)| task))
     }
 
-    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::tasks::Task>> {
+    pub async fn get(&self, query: Query) -> Result<QueryResult<types::tasks::Task>> {
         query.exec(self.pool).await
     }
 

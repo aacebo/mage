@@ -44,6 +44,8 @@ async fn main() -> error::Result<()> {
             .service(routes::agents::create)
             .service(routes::messages::create)
             .configure(move |services| {
+                services.service(routes::logs::scope());
+
                 if console_enabled {
                     routes::console::configure(services);
                 }

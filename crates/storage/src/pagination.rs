@@ -1,10 +1,4 @@
-#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
-pub struct QueryResult<T> {
-    pub next: Option<uuid::Uuid>,
-    pub items: Vec<T>,
-}
-
-pub(crate) fn paginate<T>(items: Vec<T>, limit: usize, id: impl Fn(&T) -> uuid::Uuid) -> QueryResult<T> {
+pub fn result<T>(items: Vec<T>, limit: usize, id: impl Fn(&T) -> uuid::Uuid) -> QueryResult<T> {
     let mut result = QueryResult { next: None, items };
 
     if result.items.len() > limit {
@@ -13,6 +7,15 @@ pub(crate) fn paginate<T>(items: Vec<T>, limit: usize, id: impl Fn(&T) -> uuid::
     }
 
     result
+}
+
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct QueryResult<T> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next: Option<uuid::Uuid>,
+
+    #[serde(default)]
+    pub items: Vec<T>,
 }
 
 #[derive(Debug, Default, Clone, Copy, serde::Serialize, serde::Deserialize)]

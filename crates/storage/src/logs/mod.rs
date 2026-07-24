@@ -2,6 +2,7 @@ pub mod project;
 pub mod query;
 
 use error::Result;
+pub use query::Query;
 use sqlx::PgPool;
 use sqlx::types::Json;
 
@@ -26,7 +27,7 @@ impl<'a> LogStorage<'a> {
         Ok(log.map(|Json(log)| log))
     }
 
-    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::logs::Log>> {
+    pub async fn get(&self, query: Query) -> Result<QueryResult<types::logs::Log>> {
         query.exec(self.pool).await
     }
 

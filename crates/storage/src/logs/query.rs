@@ -10,16 +10,35 @@ pub fn new() -> Query {
 pub struct Query {
     #[validate(minimum = 1)]
     #[validate(maximum = 100)]
+    #[serde(default = "default::limit")]
     pub limit: usize,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub trace_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub task_id: Option<uuid::Uuid>,
+
     #[validate(unique_items)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub levels: Option<Vec<types::logs::Level>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_id: Option<uuid::Uuid>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub before: Option<chrono::DateTime<chrono::Utc>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub after: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -140,7 +159,7 @@ impl Query {
             .map(|sqlx::types::Json(log)| log)
             .collect::<Vec<_>>();
 
-        Ok(crate::paginate(rows, self.limit, |log| log.id))
+        Ok(crate::result(rows, self.limit, |log| log.id))
     }
 }
 
@@ -158,5 +177,11 @@ impl Default for Query {
             before: None,
             after: None,
         }
+    }
+}
+
+mod default {
+    pub fn limit() -> usize {
+        10
     }
 }

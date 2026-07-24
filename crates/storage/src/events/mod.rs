@@ -6,6 +6,7 @@ use crate::QueryResult;
 
 pub mod project;
 pub mod query;
+pub use query::Query;
 
 pub struct EventStorage<'a> {
     pool: &'a PgPool,
@@ -30,7 +31,7 @@ impl<'a> EventStorage<'a> {
         Ok(event.map(|Json(event)| event))
     }
 
-    pub async fn get(&self, query: query::Query) -> Result<QueryResult<types::events::Event>> {
+    pub async fn get(&self, query: Query) -> Result<QueryResult<types::events::Event>> {
         query.exec(self.pool).await
     }
 
