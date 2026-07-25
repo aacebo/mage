@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, Scope, get, web};
+use actix_web::{HttpResponse, get};
 use askama::Template;
 
 use crate::RequestContext;
