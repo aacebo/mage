@@ -1,6 +1,3 @@
-mod connect;
-mod index;
-
 use actix_web::{HttpResponse, Scope, get, web};
 use askama::Template;
 
@@ -12,10 +9,6 @@ struct ConsoleTemplate {
     tenant_id: uuid::Uuid,
     high_water_cursor: Option<uuid::Uuid>,
     reducer_version: u32,
-}
-
-pub fn scope() -> Scope {
-    web::scope("/console").service(page).service(connect::connect)
 }
 
 #[get("")]
