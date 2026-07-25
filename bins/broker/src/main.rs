@@ -39,15 +39,14 @@ async fn main() -> error::Result<()> {
         App::new()
             .app_data(web::Data::new(ctx.clone()))
             .wrap(RequestContextMiddleware)
-            .service(routes::index::get)
-            .service(routes::agents::connect)
-            .service(routes::agents::create)
-            .service(routes::messages::create)
+            .service(routes::health::get)
             .configure(move |services| {
                 services.service(routes::logs::scope());
+                services.service(routes::agents::scope());
+                services.service(routes::messages::scope());
 
                 if console_enabled {
-                    routes::console::configure(services);
+                    services.service(routes::console::scope());
                 }
 
                 let static_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static");

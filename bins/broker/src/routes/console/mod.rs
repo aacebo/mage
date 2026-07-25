@@ -1,6 +1,6 @@
 mod connect;
 
-use actix_web::{HttpResponse, get, web};
+use actix_web::{HttpResponse, Scope, get, web};
 use askama::Template;
 
 use crate::RequestContext;
@@ -13,8 +13,8 @@ struct ConsoleTemplate {
     reducer_version: u32,
 }
 
-pub fn configure(config: &mut web::ServiceConfig) {
-    config.service(web::scope("/console").service(page).service(connect::connect));
+pub fn scope() -> Scope {
+    web::scope("/console").service(page).service(connect::connect)
 }
 
 #[get("")]

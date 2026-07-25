@@ -7,14 +7,19 @@ use crate::{RequestContext, extract};
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
 struct Request {
     pub tenant_id: uuid::Uuid,
+
     #[serde(default)]
     pub chat_id: Option<uuid::Uuid>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subject: Option<String>,
+
     #[validate]
     pub content: types::data::Contents,
+
     #[serde(default)]
     pub metadata: types::data::Metadata,
+
     #[validate]
     pub from: FromUser,
 }
@@ -25,7 +30,7 @@ struct FromUser {
     pub name: String,
 }
 
-#[post("/messages")]
+#[post("")]
 pub async fn create(ctx: RequestContext, body: extract::Json<Request>) -> Result<HttpResponse> {
     let body = body.into_inner();
     let from = match ctx

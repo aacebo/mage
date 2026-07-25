@@ -1,5 +1,8 @@
+use actix_web::{Scope, web};
+
 mod connect;
 mod create;
 
-pub use connect::*;
-pub use create::*;
+pub fn scope() -> Scope {
+    web::scope("/agents").service(connect::connect).service(create::create)
+}

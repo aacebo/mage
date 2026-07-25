@@ -24,7 +24,7 @@ enum Command {
     },
 }
 
-#[get("/agents/connect")]
+#[get("/connect")]
 pub async fn connect(
     ctx: RequestContext,
     req: HttpRequest,

@@ -2,7 +2,7 @@ use actix_web::{HttpResponse, Result, get, web};
 
 use crate::RequestContext;
 
-#[get("/logs")]
+#[get("")]
 pub async fn get(
     ctx: RequestContext,
     tenant_id: web::Path<uuid::Uuid>,

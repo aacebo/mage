@@ -1,3 +1,7 @@
+use actix_web::{Scope, web};
+
 mod create;
 
-pub use create::*;
+pub fn scope() -> Scope {
+    web::scope("/messages").service(create::create)
+}

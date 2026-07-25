@@ -21,7 +21,7 @@ struct Response<'a> {
     pub actor: &'a types::actors::Actor,
 }
 
-#[post("/agents")]
+#[post("")]
 pub async fn create(ctx: RequestContext, body: extract::Json<Request>) -> Result<HttpResponse> {
     let body = body.into_inner();
     let secret = types::secret::new();
