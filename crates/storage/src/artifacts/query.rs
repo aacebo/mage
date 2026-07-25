@@ -10,6 +10,7 @@ pub fn new() -> Query {
 pub struct Query {
     #[validate(minimum = 1)]
     #[validate(maximum = 100)]
+    #[serde(default = "default::limit")]
     pub limit: usize,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -152,5 +153,11 @@ impl Default for Query {
             before: None,
             after: None,
         }
+    }
+}
+
+mod default {
+    pub fn limit() -> usize {
+        10
     }
 }

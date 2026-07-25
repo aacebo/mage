@@ -2,8 +2,7 @@ pub fn result<T>(items: Vec<T>, limit: usize, id: impl Fn(&T) -> uuid::Uuid) -> 
     let mut result = QueryResult { next: None, items };
 
     if result.items.len() > limit {
-        result.items.pop();
-        result.next = result.items.last().map(id);
+        result.next = result.items.pop().map(|v| id(&v));
     }
 
     result

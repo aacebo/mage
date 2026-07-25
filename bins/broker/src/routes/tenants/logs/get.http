@@ -1,0 +1,5 @@
+@base = http://localhost:8080
+@tenant_id = 775a179d-9819-42c0-ab47-637bf96fbf7b
+
+### Create Calendar Agent
+GET {{base}}/tenants/{{tenant_id}}/logs HTTP/1.1

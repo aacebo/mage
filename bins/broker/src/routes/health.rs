@@ -8,7 +8,7 @@ struct IndexResponse {
     start_time: String,
 }
 
-#[get("/")]
+#[get("/health")]
 pub async fn get(ctx: RequestContext) -> HttpResponse {
     HttpResponse::Ok().json(IndexResponse {
         start_time: ctx.start_time().to_rfc3339(),

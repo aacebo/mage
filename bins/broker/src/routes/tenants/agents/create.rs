@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse, post};
+use actix_web::{HttpResponse, post, web};
 use error::Result;
 use serde_valid::Validate;
 
@@ -6,8 +6,6 @@ use crate::{RequestContext, extract};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
 struct Request {
-    pub tenant_id: uuid::Uuid,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_id: Option<String>,
 
@@ -26,7 +24,7 @@ struct Response<'a> {
 }
 
 #[post("")]
-pub async fn create(ctx: RequestContext, body: extract::Json<Request>) -> Result<HttpResponse> {
+pub async fn create(ctx: RequestContext, tenant_id: web::Path<uuid::Uuid>, body: extract::Json<Request>) -> Result<HttpResponse> {
     let body = body.into_inner();
     let secret = types::secret::new();
     let actor = ctx
@@ -35,7 +33,7 @@ pub async fn create(ctx: RequestContext, body: extract::Json<Request>) -> Result
         .create(types::actors::Actor {
             id: uuid::Uuid::now_v7(),
             external_id: body.external_id,
-            tenant_id: body.tenant_id,
+            tenant_id: tenant_id.into_inner(),
             role: types::actors::Role::Agent,
             name: body.name,
             agent: Some(types::actors::Agent {

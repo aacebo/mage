@@ -1,10 +1,10 @@
 @base = http://localhost:8080
+@tenant_id = 775a179d-9819-42c0-ab47-637bf96fbf7b
 
-POST {{base}}/messages HTTP/1.1
+POST {{base}}/tenants/{{tenant_id}}/messages HTTP/1.1
 content-type: application/json
 
 {
-    "tenant_id": "775a179d-9819-42c0-ab47-637bf96fbf7b",
     "content": [{
         "type": "text",
         "text": "Review pull request 184 and determine whether the authentication middleware allows requests with expired tokens to bypass authorization."

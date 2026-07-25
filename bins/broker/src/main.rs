@@ -41,9 +41,8 @@ async fn main() -> error::Result<()> {
             .wrap(RequestContextMiddleware)
             .service(routes::health::get)
             .configure(move |services| {
-                services.service(routes::logs::scope());
                 services.service(routes::agents::scope());
-                services.service(routes::messages::scope());
+                services.service(routes::tenants::scope());
 
                 if console_enabled {
                     services.service(routes::console::scope());

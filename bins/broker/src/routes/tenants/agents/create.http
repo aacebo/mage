@@ -2,11 +2,10 @@
 @tenant_id = 775a179d-9819-42c0-ab47-637bf96fbf7b
 
 ### Create Calendar Agent
-POST {{base}}/agents HTTP/1.1
+POST {{base}}/tenants/{{tenant_id}}/agents HTTP/1.1
 content-type: application/json
 
 {
-    "tenant_id": "{{tenant_id}}",
     "name": "calendar_agent",
     "description": "Manages calendars, availability, meetings, attendees, and reminders",
     "skills": [
@@ -26,11 +25,10 @@ content-type: application/json
 }
 
 ### Create Expense Agent
-POST {{base}}/agents HTTP/1.1
+POST {{base}}/tenants/{{tenant_id}}/agents HTTP/1.1
 content-type: application/json
 
 {
-    "tenant_id": "{{tenant_id}}",
     "name": "expense_agent",
     "description": "Processes receipts, categorizes expenses, and creates reimbursement reports",
     "skills": [
@@ -50,11 +48,10 @@ content-type: application/json
 }
 
 ### Create Code Review Agent
-POST {{base}}/agents HTTP/1.1
+POST {{base}}/tenants/{{tenant_id}}/agents HTTP/1.1
 content-type: application/json
 
 {
-    "tenant_id": "{{tenant_id}}",
     "name": "code_review_agent",
     "description": "Reviews source code and pull requests for bugs, security issues, and maintainability problems",
     "skills": [
