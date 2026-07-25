@@ -1,5 +1,5 @@
 use actix_files::Files;
-use actix_web::{App, HttpServer, web};
+use actix_web::{App, HttpServer, middleware, web};
 use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::EnvFilter;
 
@@ -32,19 +32,20 @@ async fn main() -> error::Result<()> {
         .await?;
 
     let ctx = Context::new(pool, socket, config.console.clone());
-    let console_enabled = config.console.enabled;
-    tracing::info!(port = config.port, console_enabled, "starting broker");
+    let console = config.console.enabled;
+    tracing::info!(port = config.port, console, "starting broker");
 
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(ctx.clone()))
             .wrap(RequestContextMiddleware)
+            .wrap(middleware::NormalizePath::trim())
             .service(routes::health::get)
             .configure(move |services| {
                 services.service(routes::agents::scope());
                 services.service(routes::tenants::scope());
 
-                if console_enabled {
+                if console {
                     services.service(routes::console::scope());
                 }
 
