@@ -14,11 +14,15 @@ enum Command {
     MessageSend {
         #[serde(default)]
         trace_id: Option<uuid::Uuid>,
+
         #[serde(default)]
         chat_id: Option<uuid::Uuid>,
+
         #[serde(default)]
         subject: Option<String>,
+
         content: types::data::Contents,
+
         #[serde(default)]
         metadata: types::data::Metadata,
     },

@@ -7,9 +7,14 @@ use crate::{RequestContext, extract};
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
 struct Request {
     pub tenant_id: uuid::Uuid,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub external_id: Option<String>,
+
     pub name: String,
+
     pub description: String,
+
     #[validate]
     #[serde(default)]
     pub skills: Vec<types::actors::Skill>,
