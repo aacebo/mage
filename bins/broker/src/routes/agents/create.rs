@@ -12,7 +12,6 @@ struct Request {
     pub external_id: Option<String>,
 
     pub name: String,
-
     pub description: String,
 
     #[validate]
