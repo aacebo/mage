@@ -3484,6 +3484,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "proto"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "error",
+ "serde",
+ "serde_json",
+ "serde_valid",
+ "types",
+ "uuid",
+]
+
+[[package]]
 name = "pulp"
 version = "0.22.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
