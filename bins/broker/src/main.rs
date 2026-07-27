@@ -38,7 +38,7 @@ async fn main() -> error::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(ctx.clone()))
-            .wrap(RequestContextMiddleware)
+            .wrap(RequestMiddleware)
             .wrap(middleware::NormalizePath::trim())
             .service(routes::health::get)
             .configure(move |services| {

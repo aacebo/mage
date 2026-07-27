@@ -173,9 +173,9 @@ impl std::ops::Deref for RequestContext {
     }
 }
 
-pub struct RequestContextMiddleware;
+pub struct RequestMiddleware;
 
-impl<S, B> Transform<S, ServiceRequest> for RequestContextMiddleware
+impl<S, B> Transform<S, ServiceRequest> for RequestMiddleware
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = ActixError>,
     S::Future: 'static,
@@ -183,20 +183,20 @@ where
 {
     type Response = ServiceResponse<B>;
     type Error = ActixError;
-    type Transform = RequestContextMiddlewareService<S>;
+    type Transform = RequestMiddlewareService<S>;
     type InitError = ();
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(RequestContextMiddlewareService { service }))
+        ready(Ok(Self::Transform { service }))
     }
 }
 
-pub struct RequestContextMiddlewareService<S> {
+pub struct RequestMiddlewareService<S> {
     service: S,
 }
 
-impl<S, B> Service<ServiceRequest> for RequestContextMiddlewareService<S>
+impl<S, B> Service<ServiceRequest> for RequestMiddlewareService<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = ActixError>,
     S::Future: 'static,
