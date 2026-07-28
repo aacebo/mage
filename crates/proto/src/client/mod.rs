@@ -7,6 +7,9 @@ pub mod stream;
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
 #[serde(tag = "type")]
 pub enum Signal {
+    #[serde(rename = "ack")]
+    Ack,
+
     #[serde(rename = "connect")]
     #[validate]
     Connect(connect::Connect),
