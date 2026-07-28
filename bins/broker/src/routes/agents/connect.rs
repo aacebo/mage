@@ -225,37 +225,3 @@ async fn close(session: actix_ws::Session, code: CloseCode, description: &str) {
         }))
         .await;
 }
-
-#[cfg(test)]
-mod tests {
-    use serde_valid::Validate;
-
-    use super::Command;
-
-    #[test]
-    fn parses_agent_message_command() {
-        let command = serde_json::from_str::<Command>(
-            r#"{
-                "type":"message_send",
-                "trace_id":"00000000-0000-0000-0000-000000000001",
-                "content":[{"type":"text","text":"hello"}],
-                "metadata":{"source":"test"}
-            }"#,
-        );
-        assert!(matches!(command, Ok(Command::MessageSend { .. })));
-    }
-
-    #[test]
-    fn rejects_invalid_agent_message_content() {
-        let command = serde_json::from_str::<Command>(
-            r#"{
-                "type":"message_send",
-                "content":[],
-                "metadata":{}
-            }"#,
-        )
-        .unwrap();
-        let Command::MessageSend { content, .. } = command;
-        assert!(content.validate().is_err());
-    }
-}

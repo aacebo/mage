@@ -1,6 +1,6 @@
 use serde_valid::Validate;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize, Validate)]
 #[serde(transparent)]
 pub struct Contents(#[validate(min_items = 1)] Vec<Content>);
 
@@ -37,6 +37,7 @@ pub enum Content {
     File {
         #[serde(skip_serializing_if = "Option::is_none")]
         name: Option<String>,
+
         #[serde(flatten)]
         file: FileContent,
     },
