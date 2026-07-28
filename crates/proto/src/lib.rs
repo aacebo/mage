@@ -127,8 +127,8 @@ mod tests {
         let server = tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
         });
-        let url = format!("ws://{address}/connect");
 
+        let url = format!("ws://{address}/connect");
         let mut socket = super::Socket::connect(url.as_str()).await.unwrap();
         let message = super::ProtocolMessage::new(uuid::Uuid::now_v7(), super::client::Signal::Ack);
         let expected = serde_json::to_vec(&message).unwrap();
@@ -137,6 +137,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+
         assert!(headers.get("x-agent-id").is_none());
         assert_eq!(frame, Message::Binary(expected.into()));
 
@@ -152,9 +153,9 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+
         assert_eq!(headers["x-agent-id"], "019c0000-0000-7000-8000-000000000000");
         assert_eq!(frame, Message::Binary(expected.into()));
-
         assert!(
             super::Socket::connect(format!("ws://{address}/missing").as_str())
                 .await
