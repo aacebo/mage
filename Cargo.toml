@@ -9,4 +9,5 @@ edition = "2024"
 license = "MIT"
 
 [workspace.lints.clippy]
+large_enum_variant = "allow"
 type_complexity = "allow"
