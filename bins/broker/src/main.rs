@@ -58,7 +58,6 @@ async fn main() -> error::Result<()> {
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", config.port)).await?;
 
     axum::serve(listener, app).with_graceful_shutdown(on_shutdown()).await?;
-
     Ok(())
 }
 
