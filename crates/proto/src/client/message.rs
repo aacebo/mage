@@ -8,7 +8,7 @@ pub fn new(chat_id: impl Into<uuid::Uuid>) -> Builder {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
-pub struct MessageResponse {
+pub struct Message {
     pub chat_id: uuid::Uuid,
 
     #[serde(default)]
@@ -22,7 +22,7 @@ pub struct MessageResponse {
     pub metadata: types::data::Metadata,
 }
 
-impl MessageResponse {
+impl Message {
     pub fn into_signal(self) -> super::Signal {
         self.into()
     }
@@ -53,8 +53,8 @@ impl Builder {
         self
     }
 
-    pub fn build(self) -> MessageResponse {
-        MessageResponse {
+    pub fn build(self) -> Message {
+        Message {
             chat_id: self._chat_id,
             reply_to: self._reply_to,
             content: self._content,

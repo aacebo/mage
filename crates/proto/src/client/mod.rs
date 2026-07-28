@@ -14,13 +14,13 @@ pub enum Signal {
     #[validate]
     Connect(connect::Connect),
 
-    #[serde(rename = "response.message")]
+    #[serde(rename = "message")]
     #[validate]
-    Message(message::MessageResponse),
+    Message(message::Message),
 
     #[serde(untagged)]
     #[validate]
-    Stream(stream::StreamResponse),
+    Stream(stream::StreamEvent),
 }
 
 impl Signal {
@@ -31,14 +31,14 @@ impl Signal {
         }
     }
 
-    pub fn as_message_response(&self) -> Option<&message::MessageResponse> {
+    pub fn as_message(&self) -> Option<&message::Message> {
         match self {
             Self::Message(v) => Some(v),
             _ => None,
         }
     }
 
-    pub fn as_stream_response(&self) -> Option<&stream::StreamResponse> {
+    pub fn as_stream_event(&self) -> Option<&stream::StreamEvent> {
         match self {
             Self::Stream(v) => Some(v),
             _ => None,
@@ -52,14 +52,14 @@ impl From<connect::Connect> for Signal {
     }
 }
 
-impl From<message::MessageResponse> for Signal {
-    fn from(value: message::MessageResponse) -> Self {
+impl From<message::Message> for Signal {
+    fn from(value: message::Message) -> Self {
         Self::Message(value)
     }
 }
 
-impl From<stream::StreamResponse> for Signal {
-    fn from(value: stream::StreamResponse) -> Self {
+impl From<stream::StreamEvent> for Signal {
+    fn from(value: stream::StreamEvent) -> Self {
         Self::Stream(value)
     }
 }
