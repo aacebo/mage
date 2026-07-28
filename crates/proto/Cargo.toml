@@ -20,6 +20,7 @@ serde = { version = "1", features = ["default", "derive"] }
 
 uuid = { version = "1.19", features = ["v7", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+futures-util = { version = "0.3" }
 
 error = { path = "../error" }
 types = { path = "../types" }

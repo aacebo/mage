@@ -1,4 +1,5 @@
 use actix_codec::Framed;
+use futures_util::SinkExt;
 
 pub mod client;
 pub mod server;
@@ -7,7 +8,7 @@ pub trait Producer {
     type Error;
     type Signal;
 
-    fn send(&mut self, message: ProtocolMessage<Self::Signal>) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    fn send(&mut self, message: ProtocolMessage<Self::Signal>) -> impl Future<Output = Result<(), Self::Error>>;
 }
 
 pub trait Consumer {
@@ -49,12 +50,12 @@ impl<T> ProtocolMessage<T> {
 }
 
 pub struct Socket {
-    socket: std::pin::Pin<Framed<awc::BoxedSocket, awc::ws::Codec>>,
+    socket: Framed<awc::BoxedSocket, awc::ws::Codec>,
 }
 
 impl From<Framed<awc::BoxedSocket, awc::ws::Codec>> for Socket {
     fn from(socket: Framed<awc::BoxedSocket, awc::ws::Codec>) -> Self {
-        Self { socket: socket.into() }
+        Self { socket }
     }
 }
 
@@ -62,7 +63,10 @@ impl Producer for Socket {
     type Error = error::Error;
     type Signal = client::Signal;
 
-    fn send(&mut self, message: ProtocolMessage<Self::Signal>) -> impl Future<Output = Result<(), Self::Error>> + Send {
+    async fn send(&mut self, message: ProtocolMessage<Self::Signal>) -> Result<(), Self::Error> {
         self.socket
+            .send(awc::ws::Message::Binary(serde_json::to_vec(&message)?.into()))
+            .await
+            .map_err(error::http)
     }
 }
