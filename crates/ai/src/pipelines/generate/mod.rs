@@ -13,9 +13,12 @@ pub fn run(model: &mut Bart, config: &Config, input: &Tensor, device: &Device) -
 
     model.reset_kv_cache();
 
-    let encoder_xs = model.encode(input)?;
-    let (_, seq, hidden) = encoder_xs.dims3()?;
-    let encoder_xs = encoder_xs.expand((beams, seq, hidden)).and_then(|xs| xs.contiguous())?;
+    let encoder_xs = model.encode(input).map_err(error::ai)?;
+    let (_, seq, hidden) = encoder_xs.dims3().map_err(error::ai)?;
+    let encoder_xs = encoder_xs
+        .expand((beams, seq, hidden))
+        .and_then(|xs| xs.contiguous())
+        .map_err(error::ai)?;
 
     let mut sequences: Vec<Vec<u32>> = vec![vec![config.decoder_start_token_id]; beams];
     let mut scores: Vec<f64> = (0..beams).map(|i| if i == 0 { 0.0 } else { f64::NEG_INFINITY }).collect();
@@ -23,12 +26,15 @@ pub fn run(model: &mut Bart, config: &Config, input: &Tensor, device: &Device) -
     let mut tokens = vec![config.decoder_start_token_id; beams];
 
     for past_kv_len in 0..config.max_length {
-        let input = Tensor::from_vec(tokens.clone(), (beams, 1), device)?;
+        let input = Tensor::from_vec(tokens.clone(), (beams, 1), device).map_err(error::ai)?;
 
         let logits = model
             .decode(&input, &encoder_xs, past_kv_len)
-            .and_then(|logits| logits.squeeze(1))?;
-        let mut log_probs = ops::log_softmax(&logits, 1).and_then(|probs| probs.to_vec2::<f32>())?;
+            .and_then(|logits| logits.squeeze(1))
+            .map_err(error::ai)?;
+        let mut log_probs = ops::log_softmax(&logits, 1)
+            .and_then(|probs| probs.to_vec2::<f32>())
+            .map_err(error::ai)?;
         let generated = sequences[0].len() - 1;
 
         for (beam, row) in log_probs.iter_mut().enumerate() {
@@ -78,8 +84,8 @@ pub fn run(model: &mut Bart, config: &Config, input: &Tensor, device: &Device) -
         // Follow the surviving beams. Skipping this makes a beam read whichever history
         // happens to sit in its slot.
         let order: Vec<u32> = next.iter().map(|(_, beam, _)| *beam as u32).collect();
-        let order = Tensor::from_vec(order, next.len(), device)?;
-        model.reorder_kv_cache(&order)?;
+        let order = Tensor::from_vec(order, next.len(), device).map_err(error::ai)?;
+        model.reorder_kv_cache(&order).map_err(error::ai)?;
 
         let previous = sequences.clone();
 

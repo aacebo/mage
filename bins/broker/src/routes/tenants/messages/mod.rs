@@ -1,7 +1,12 @@
-use actix_web::{Scope, web};
+use std::sync::Arc;
+
+use axum::Router;
+use axum::routing::post;
+
+use crate::Context;
 
 mod create;
 
-pub fn scope() -> Scope {
-    web::scope("/messages").service(create::create)
+pub fn router() -> Router<Arc<Context>> {
+    Router::new().route("/", post(create::create))
 }

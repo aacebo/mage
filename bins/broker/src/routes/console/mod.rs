@@ -1,8 +1,15 @@
 mod connect;
 mod index;
 
-use actix_web::{Scope, web};
+use std::sync::Arc;
 
-pub fn scope() -> Scope {
-    web::scope("/console").service(index::page).service(connect::connect)
+use axum::Router;
+use axum::routing::get;
+
+use crate::Context;
+
+pub fn router() -> Router<Arc<Context>> {
+    Router::new()
+        .route("/", get(index::page))
+        .route("/connect", get(connect::connect))
 }

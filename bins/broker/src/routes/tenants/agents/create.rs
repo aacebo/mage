@@ -1,11 +1,14 @@
-use actix_web::{HttpResponse, post, web};
+use axum::Json;
+use axum::extract::Path;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response as HttpResponse};
 use error::Result;
 use serde_valid::Validate;
 
 use crate::{RequestContext, extract};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
-struct Request {
+pub(super) struct Request {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_id: Option<String>,
 
@@ -23,8 +26,11 @@ struct Response<'a> {
     pub actor: &'a types::actors::Actor,
 }
 
-#[post("")]
-pub async fn create(ctx: RequestContext, tenant_id: web::Path<uuid::Uuid>, body: extract::Json<Request>) -> Result<HttpResponse> {
+pub async fn create(
+    ctx: RequestContext,
+    Path(tenant_id): Path<uuid::Uuid>,
+    body: extract::Json<Request>,
+) -> Result<HttpResponse> {
     let body = body.into_inner();
     let secret = types::secret::new();
     let actor = ctx
@@ -33,7 +39,7 @@ pub async fn create(ctx: RequestContext, tenant_id: web::Path<uuid::Uuid>, body:
         .create(types::actors::Actor {
             id: uuid::Uuid::now_v7(),
             external_id: body.external_id,
-            tenant_id: tenant_id.into_inner(),
+            tenant_id,
             role: types::actors::Role::Agent,
             name: body.name,
             agent: Some(types::actors::Agent {
@@ -50,10 +56,14 @@ pub async fn create(ctx: RequestContext, tenant_id: web::Path<uuid::Uuid>, body:
         })
         .await?;
 
-    let res = HttpResponse::Created().json(Response {
-        secret: &secret,
-        actor: &actor,
-    });
+    let res = (
+        StatusCode::CREATED,
+        Json(Response {
+            secret: &secret,
+            actor: &actor,
+        }),
+    )
+        .into_response();
 
     ctx.enqueue(actor.tenant_id, "actor.create", actor).await?;
     Ok(res)

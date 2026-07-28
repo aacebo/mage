@@ -24,7 +24,7 @@ pub struct Summarizer {
 impl Summarizer {
     pub fn new(config: &Config, vars: VarBuilder) -> Result<Self> {
         Ok(Self {
-            model: Mutex::new(Bart::new(config, vars)?),
+            model: Mutex::new(Bart::new(config, vars).map_err(error::ai)?),
             generation: generate::Config::from(config),
             max_position_embeddings: config.max_position_embeddings,
         })
@@ -58,7 +58,7 @@ impl Summarizer {
 
         // The learned positional embeddings only cover `max_position_embeddings`.
         let ids = &ids[..ids.len().min(self.max_position_embeddings)];
-        let input = Tensor::from_slice(ids, (1, ids.len()), cx.device())?;
+        let input = Tensor::from_slice(ids, (1, ids.len()), cx.device()).map_err(error::ai)?;
         let mut model = self
             .model
             .lock()

@@ -1,5 +1,5 @@
 use error::Result;
-use futures_lite::StreamExt;
+use futures_util::StreamExt;
 
 use crate::Socket;
 

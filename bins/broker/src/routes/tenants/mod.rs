@@ -1,12 +1,16 @@
-use actix_web::{Scope, web};
+use std::sync::Arc;
+
+use axum::Router;
+
+use crate::Context;
 
 pub mod agents;
 pub mod logs;
 pub mod messages;
 
-pub fn scope() -> Scope {
-    web::scope("/tenants/{tenant_id}")
-        .service(agents::scope())
-        .service(logs::scope())
-        .service(messages::scope())
+pub fn router() -> Router<Arc<Context>> {
+    Router::new()
+        .nest("/agents", agents::router())
+        .nest("/logs", logs::router())
+        .nest("/messages", messages::router())
 }

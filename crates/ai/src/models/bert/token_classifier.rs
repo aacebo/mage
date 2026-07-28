@@ -17,7 +17,7 @@ pub struct TokenClassifier {
 impl TokenClassifier {
     pub fn new(vars: VarBuilder, config: &Config) -> Result<Self> {
         let labels = config.labels()?;
-        let classifier = candle_nn::linear(config.hidden_size, labels.len(), vars.pp("classifier"))?;
+        let classifier = candle_nn::linear(config.hidden_size, labels.len(), vars.pp("classifier")).map_err(error::ai)?;
 
         Ok(Self {
             bert: Bert::new(vars, config)?,
@@ -79,12 +79,13 @@ impl TokenClassifier {
         }
 
         let shape = (1, ids.len());
-        let input = Tensor::from_slice(ids, shape, cx.device())?;
-        let mask = Tensor::from_slice(encoding.get_attention_mask(), shape, cx.device())?;
+        let input = Tensor::from_slice(ids, shape, cx.device()).map_err(error::ai)?;
+        let mask = Tensor::from_slice(encoding.get_attention_mask(), shape, cx.device()).map_err(error::ai)?;
         let probs = self
             .forward(&input, &mask)?
             .squeeze(0)
-            .and_then(|probs| probs.to_vec2::<f32>())?;
+            .and_then(|probs| probs.to_vec2::<f32>())
+            .map_err(error::ai)?;
 
         aggregation::words(&probs, &encoding, self.labels())
     }

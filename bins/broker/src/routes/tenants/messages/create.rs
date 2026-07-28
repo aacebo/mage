@@ -1,11 +1,12 @@
-use actix_web::{HttpResponse, post, web};
+use axum::extract::Path;
+use axum::response::{IntoResponse, Response as HttpResponse};
 use error::Result;
 use serde_valid::Validate;
 
 use crate::{RequestContext, extract};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
-struct Request {
+pub(super) struct Request {
     #[serde(default)]
     pub chat_id: Option<uuid::Uuid>,
 
@@ -23,15 +24,17 @@ struct Request {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
-struct FromUser {
+pub(super) struct FromUser {
     pub id: String,
     pub name: String,
 }
 
-#[post("")]
-pub async fn create(ctx: RequestContext, tenant_id: web::Path<uuid::Uuid>, body: extract::Json<Request>) -> Result<HttpResponse> {
+pub async fn create(
+    ctx: RequestContext,
+    Path(tenant_id): Path<uuid::Uuid>,
+    body: extract::Json<Request>,
+) -> Result<HttpResponse> {
     let body = body.into_inner();
-    let tenant_id = tenant_id.into_inner();
     let from = match ctx
         .storage()
         .actors()
@@ -87,5 +90,5 @@ pub async fn create(ctx: RequestContext, tenant_id: web::Path<uuid::Uuid>, body:
     // 4. create a new chat with the relevant agents and the from user.
     // 5. on message create, generate message summary/embedding/annotations/artifacts
 
-    Ok(HttpResponse::Ok().json(message))
+    Ok(axum::Json(message).into_response())
 }

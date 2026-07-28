@@ -12,17 +12,17 @@ doctest = false
 workspace = true
 
 [dependencies]
-serde = { version = "1", features = ["derive", "rc"] }
-serde_json = { version = "1" }
+serde = { workspace = true, features = ["rc"] }
+serde_json.workspace = true
 candle-core = { version = "0.11" }
 candle-nn = { version = "0.11" }
 candle-transformers = { version = "0.11" }
 tokenizers = { version = "0.22" }
 hf-hub = { version = "0.5" }
-reqwest = { version = "0.13", features = ["json", "blocking"] }
-url = { version = "2" }
+reqwest = { workspace = true, features = ["blocking", "charset", "default-tls", "http2", "json", "system-proxy"] }
+url.workspace = true
 
-error = { path = "../error", features = ["ai"] }
+error = { workspace = true, features = ["ai"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-core = { version = "0.11", features = ["accelerate"] }

@@ -8,16 +8,16 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-serde = { version = "1", features = ["default", "derive"] }
-uuid = { version = "1.19", features = ["v7", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
-sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres"] }
-tokio = { version = "1", features = ["time", "macros", "rt-multi-thread"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+serde.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+sqlx = { workspace = true, features = ["runtime-tokio", "postgres"] }
+tokio = { workspace = true, features = ["time", "macros", "rt-multi-thread"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 ai = { path = "../../crates/ai" }
-amqp = { path = "../../crates/amqp" }
-error = { path = "../../crates/error", features = ["amqp", "storage"] }
-storage = { path = "../../crates/storage" }
-types = { path = "../../crates/types" }
+amqp.workspace = true
+error = { workspace = true, features = ["amqp", "storage"] }
+storage.workspace = true
+types.workspace = true

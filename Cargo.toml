@@ -8,6 +8,27 @@ version = "0.0.0"
 edition = "2024"
 license = "MIT"
 
+[workspace.dependencies]
+axum = { version = "0.8.9", default-features = false }
+chrono = { version = "0.4", features = ["serde"] }
+futures-util = { version = "0.3" }
+lapin = { version = "2" }
+reqwest = { version = "0.13", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+serde_valid = { version = "2" }
+sqlx = { version = "0.9", default-features = false }
+tokio = { version = "1" }
+tracing = { version = "0.1" }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+url = { version = "2.5" }
+uuid = { version = "1.19", features = ["v7", "serde"] }
+
+amqp = { path = "crates/amqp" }
+error = { path = "crates/error" }
+storage = { path = "crates/storage" }
+types = { path = "crates/types" }
+
 [workspace.lints.clippy]
 large_enum_variant = "allow"
 type_complexity = "allow"

@@ -1,6 +1,10 @@
-use actix_files::Files;
-use actix_web::{App, HttpServer, middleware, web};
+use std::sync::Arc;
+
+use axum::{Router, ServiceExt};
 use sqlx::postgres::PgPoolOptions;
+use tower::Layer;
+use tower_http::normalize_path::NormalizePathLayer;
+use tower_http::services::ServeDir;
 use tracing_subscriber::EnvFilter;
 
 mod config;
@@ -11,7 +15,7 @@ mod routes;
 pub use config::{Config, ConsoleConfig};
 pub use context::*;
 
-#[actix_web::main]
+#[tokio::main]
 async fn main() -> error::Result<()> {
     tracing_subscriber::fmt()
         .compact()
@@ -31,35 +35,57 @@ async fn main() -> error::Result<()> {
         .connect()
         .await?;
 
-    let ctx = Context::new(pool, socket, config.console.clone());
+    let ctx = Arc::new(Context::new(pool, socket, config.console.clone()));
     let console = config.console.enabled;
     tracing::info!(port = config.port, console, "starting broker");
 
-    HttpServer::new(move || {
-        App::new()
-            .app_data(web::Data::new(ctx.clone()))
-            .wrap(RequestMiddleware)
-            .wrap(middleware::NormalizePath::trim())
-            .service(routes::health::get)
-            .configure(move |services| {
-                services.service(routes::agents::scope());
-                services.service(routes::tenants::scope());
+    let mut app = Router::new()
+        .route("/health", axum::routing::get(routes::health::get))
+        .nest("/agents", routes::agents::router())
+        .nest("/tenants/{tenant_id}", routes::tenants::router());
 
-                if console {
-                    services.service(routes::console::scope());
-                }
+    if console {
+        app = app.nest("/console", routes::console::router());
+    }
 
-                let static_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static");
-                services.service(
-                    Files::new("/static", static_dir)
-                        .index_file("index.html")
-                        .show_files_listing(),
-                );
-            })
-    })
-    .bind(("0.0.0.0", config.port))?
-    .run()
-    .await?;
+    let static_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static");
+    let app = app
+        .nest_service("/static", ServeDir::new(static_dir).append_index_html_on_directories(true))
+        .layer(axum::middleware::from_fn_with_state(ctx.clone(), request_middleware))
+        .with_state(ctx);
+    let app = NormalizePathLayer::trim_trailing_slash().layer(app);
+    let app = ServiceExt::<axum::extract::Request>::into_make_service(app);
+    let listener = tokio::net::TcpListener::bind(("0.0.0.0", config.port)).await?;
+
+    axum::serve(listener, app).with_graceful_shutdown(on_shutdown()).await?;
 
     Ok(())
+}
+
+async fn on_shutdown() {
+    let ctrl_c = async {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            tracing::error!(%error, "failed to listen for Ctrl-C");
+        }
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+            }
+            Err(error) => tracing::error!(%error, "failed to listen for SIGTERM"),
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {}
+        _ = terminate => {}
+    }
+
+    tracing::info!("shutdown signal received");
 }

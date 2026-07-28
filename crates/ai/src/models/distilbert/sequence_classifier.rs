@@ -20,14 +20,14 @@ impl SequenceClassifier {
 
         Ok(Self {
             distilbert: DistilBert::new(vars.clone(), config)?,
-            pre_classifier: candle_nn::linear(hidden, hidden, vars.pp("pre_classifier"))?,
-            classifier: candle_nn::linear(hidden, LABELS, vars.pp("classifier"))?,
+            pre_classifier: candle_nn::linear(hidden, hidden, vars.pp("pre_classifier")).map_err(error::ai)?,
+            classifier: candle_nn::linear(hidden, LABELS, vars.pp("classifier")).map_err(error::ai)?,
         })
     }
 
     pub fn forward(&self, ids: &Tensor, padding: &Tensor) -> Result<Vec<Vec<f32>>> {
         let hidden = self.distilbert.forward(ids, padding)?;
-        let pooled = hidden.i((.., 0))?;
+        let pooled = hidden.i((.., 0)).map_err(error::ai)?;
         self.pre_classifier
             .forward(&pooled)
             .and_then(|v| v.relu())

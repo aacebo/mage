@@ -1,16 +1,15 @@
-use actix_web::{HttpResponse, get};
+use axum::Json;
 use serde::Serialize;
 
 use crate::RequestContext;
 
 #[derive(Serialize)]
-struct IndexResponse {
+pub(crate) struct IndexResponse {
     start_time: String,
 }
 
-#[get("/health")]
-pub async fn get(ctx: RequestContext) -> HttpResponse {
-    HttpResponse::Ok().json(IndexResponse {
+pub async fn get(ctx: RequestContext) -> Json<IndexResponse> {
+    Json(IndexResponse {
         start_time: ctx.start_time().to_rfc3339(),
     })
 }

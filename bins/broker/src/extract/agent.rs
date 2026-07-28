@@ -1,7 +1,5 @@
-use std::future::{Ready, ready};
-use std::pin::Pin;
-
-use actix_web::{FromRequest, HttpMessage, HttpRequest, dev, web};
+use axum::extract::{FromRequestParts, Query};
+use axum::http::request::Parts;
 
 use crate::RequestContext;
 
@@ -15,14 +13,12 @@ struct Credentials {
     secret: String,
 }
 
-impl FromRequest for Credentials {
-    type Error = error::Error;
-    type Future = Ready<Result<Self, Self::Error>>;
+impl Credentials {
+    fn from_parts(parts: &Parts) -> error::Result<Self> {
+        let agent_id = parts.headers.get(AGENT_ID_HEADER);
+        let secret = parts.headers.get(AGENT_SECRET_HEADER);
 
-    fn from_request(req: &HttpRequest, _payload: &mut dev::Payload) -> Self::Future {
-        let agent_id = req.headers().get(AGENT_ID_HEADER);
-        let secret = req.headers().get(AGENT_SECRET_HEADER);
-        let credentials = match (agent_id, secret) {
+        match (agent_id, secret) {
             (Some(agent_id), Some(secret)) => {
                 let agent_id = agent_id
                     .to_str()
@@ -36,13 +32,11 @@ impl FromRequest for Credentials {
 
                 agent_id.and_then(|agent_id| secret.map(|secret| Self { agent_id, secret }))
             }
-            (None, None) => web::Query::<Self>::from_query(req.query_string())
-                .map(web::Query::into_inner)
+            (None, None) => Query::<Self>::try_from_uri(&parts.uri)
+                .map(|Query(credentials)| credentials)
                 .map_err(|_| error::unauthorized(INVALID_CREDENTIALS)),
             _ => Err(error::unauthorized(INVALID_CREDENTIALS)),
-        };
-
-        ready(credentials)
+        }
     }
 }
 
@@ -63,63 +57,119 @@ impl std::ops::DerefMut for Agent {
     }
 }
 
-impl FromRequest for Agent {
-    type Error = error::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+impl<S> FromRequestParts<S> for Agent
+where
+    S: Send + Sync,
+{
+    type Rejection = error::Error;
 
-    fn from_request(req: &HttpRequest, payload: &mut dev::Payload) -> Self::Future {
-        let credentials = Credentials::from_request(req, payload);
-        let ctx = req
-            .extensions()
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let credentials = Credentials::from_parts(parts);
+        let ctx = parts
+            .extensions
             .get::<RequestContext>()
             .cloned()
             .expect("RequestContext not found in request extensions");
 
-        Box::pin(async move {
-            let Credentials { agent_id, secret } = match credentials.await {
-                Ok(credentials) => credentials,
-                Err(error) => {
-                    tracing::warn!("agent authentication rejected");
-                    return Err(error);
-                }
-            };
+        let Credentials { agent_id, secret } = match credentials {
+            Ok(credentials) => credentials,
+            Err(error) => {
+                tracing::warn!("agent authentication rejected");
+                return Err(error);
+            }
+        };
 
-            let stored_secret = match ctx.storage().actors().get_secret(agent_id).await {
-                Ok(Some(secret)) => secret,
-                Ok(None) => {
-                    tracing::warn!(%agent_id, "agent authentication rejected");
-                    return Err(error::unauthorized(INVALID_CREDENTIALS));
-                }
-                Err(error) => {
-                    tracing::error!(%error, %agent_id, "failed to load agent credentials");
-                    return Err(error);
-                }
-            };
-
-            if stored_secret != secret {
+        let stored_secret = match ctx.storage().actors().get_secret(agent_id).await {
+            Ok(Some(secret)) => secret,
+            Ok(None) => {
                 tracing::warn!(%agent_id, "agent authentication rejected");
                 return Err(error::unauthorized(INVALID_CREDENTIALS));
             }
+            Err(error) => {
+                tracing::error!(%error, %agent_id, "failed to load agent credentials");
+                return Err(error);
+            }
+        };
 
-            let actor = match ctx.storage().actors().get_by_id(agent_id).await {
-                Ok(Some(actor)) => actor,
-                Ok(None) => {
-                    tracing::warn!(%agent_id, "agent authentication rejected");
-                    return Err(error::unauthorized(INVALID_CREDENTIALS));
-                }
-                Err(error) => {
-                    tracing::error!(%error, %agent_id, "failed to load authenticated agent");
-                    return Err(error);
-                }
-            };
+        if stored_secret != secret {
+            tracing::warn!(%agent_id, "agent authentication rejected");
+            return Err(error::unauthorized(INVALID_CREDENTIALS));
+        }
 
-            if actor.agent.is_none() {
+        let actor = match ctx.storage().actors().get_by_id(agent_id).await {
+            Ok(Some(actor)) => actor,
+            Ok(None) => {
                 tracing::warn!(%agent_id, "agent authentication rejected");
                 return Err(error::unauthorized(INVALID_CREDENTIALS));
             }
+            Err(error) => {
+                tracing::error!(%error, %agent_id, "failed to load authenticated agent");
+                return Err(error);
+            }
+        };
 
-            tracing::debug!(%agent_id, tenant_id = %actor.tenant_id, "agent authenticated");
-            Ok(Self(actor))
-        })
+        if actor.agent.is_none() {
+            tracing::warn!(%agent_id, "agent authentication rejected");
+            return Err(error::unauthorized(INVALID_CREDENTIALS));
+        }
+
+        tracing::debug!(%agent_id, tenant_id = %actor.tenant_id, "agent authenticated");
+        Ok(Self(actor))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::http::Request;
+
+    fn parts(uri: &str, agent_id: Option<&str>, secret: Option<&str>) -> axum::http::request::Parts {
+        let mut request = Request::builder().uri(uri);
+
+        if let Some(agent_id) = agent_id {
+            request = request.header(super::AGENT_ID_HEADER, agent_id);
+        }
+
+        if let Some(secret) = secret {
+            request = request.header(super::AGENT_SECRET_HEADER, secret);
+        }
+
+        request.body(()).unwrap().into_parts().0
+    }
+
+    #[test]
+    fn complete_headers_take_precedence() {
+        let agent_id = uuid::Uuid::now_v7();
+        let parts = parts(
+            "/agents/connect?agent_id=invalid&secret=query",
+            Some(&agent_id.to_string()),
+            Some("header"),
+        );
+        let credentials = super::Credentials::from_parts(&parts).unwrap();
+        assert_eq!(credentials.agent_id, agent_id);
+        assert_eq!(credentials.secret, "header");
+    }
+
+    #[test]
+    fn query_credentials_are_the_fallback() {
+        let agent_id = uuid::Uuid::now_v7();
+        let parts = parts(&format!("/agents/connect?agent_id={agent_id}&secret=query"), None, None);
+        let credentials = super::Credentials::from_parts(&parts).unwrap();
+        assert_eq!(credentials.agent_id, agent_id);
+        assert_eq!(credentials.secret, "query");
+    }
+
+    #[test]
+    fn partial_headers_are_rejected() {
+        let agent_id = uuid::Uuid::now_v7();
+        let parts = parts(
+            &format!("/agents/connect?agent_id={agent_id}&secret=query"),
+            Some(&agent_id.to_string()),
+            None,
+        );
+        let error = match super::Credentials::from_parts(&parts) {
+            Ok(_) => panic!("partial headers were accepted"),
+            Err(error) => error,
+        };
+        assert_eq!(error.name(), "unauthorized");
     }
 }

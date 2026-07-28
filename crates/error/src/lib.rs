@@ -126,13 +126,6 @@ impl From<lapin::Error> for Error {
 }
 
 #[cfg(feature = "ai")]
-impl From<candle_core::Error> for Error {
-    fn from(value: candle_core::Error) -> Self {
-        ai(value)
-    }
-}
-
-#[cfg(feature = "ai")]
 impl From<reqwest::Error> for Error {
     fn from(value: reqwest::Error) -> Self {
         ai(value)
@@ -154,24 +147,46 @@ impl From<sqlx::Error> for Error {
 }
 
 #[cfg(feature = "web")]
-impl From<actix_web::Error> for Error {
-    fn from(value: actix_web::Error) -> Self {
-        http(value)
+impl Error {
+    pub fn status_code(&self) -> axum::http::StatusCode {
+        match self.name() {
+            "not_found" => axum::http::StatusCode::NOT_FOUND,
+            "bad_request" | "parse" | "json" => axum::http::StatusCode::BAD_REQUEST,
+            "unauthorized" => axum::http::StatusCode::UNAUTHORIZED,
+            _ => axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+        }
     }
 }
 
 #[cfg(feature = "web")]
-impl actix_web::ResponseError for Error {
-    fn status_code(&self) -> actix_web::http::StatusCode {
-        match self.name() {
-            "not_found" => actix_web::http::StatusCode::NOT_FOUND,
-            "bad_request" | "parse" | "json" => actix_web::http::StatusCode::BAD_REQUEST,
-            "unauthorized" => actix_web::http::StatusCode::UNAUTHORIZED,
-            _ => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-        }
+impl axum::response::IntoResponse for Error {
+    fn into_response(self) -> axum::response::Response {
+        (self.status_code(), axum::Json(self)).into_response()
     }
+}
 
-    fn error_response(&self) -> actix_web::HttpResponse {
-        actix_web::HttpResponse::build(self.status_code()).json(self)
+#[cfg(all(test, feature = "web"))]
+mod tests {
+    use axum::body::to_bytes;
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    #[tokio::test]
+    async fn web_errors_preserve_status_and_json() {
+        let cases = [
+            (super::new("not_found", "missing"), StatusCode::NOT_FOUND),
+            (super::bad_request("bad"), StatusCode::BAD_REQUEST),
+            (super::unauthorized("denied"), StatusCode::UNAUTHORIZED),
+            (super::http("failed"), StatusCode::INTERNAL_SERVER_ERROR),
+        ];
+
+        for (error, expected_status) in cases {
+            let expected = serde_json::to_value(&error).unwrap();
+            let response = error.into_response();
+            assert_eq!(response.status(), expected_status);
+            assert_eq!(response.headers()[axum::http::header::CONTENT_TYPE], "application/json");
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            assert_eq!(serde_json::from_slice::<serde_json::Value>(&body).unwrap(), expected);
+        }
     }
 }

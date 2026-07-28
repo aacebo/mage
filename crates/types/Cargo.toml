@@ -12,11 +12,11 @@ workspace = true
 
 [dependencies]
 rand = { version = "0.10", features = [] }
-serde_json = { version = "1" }
-serde_valid = { version = "2" }
-serde = { version = "1", features = ["default", "derive"] }
-url = { version = "2.5", features = ["serde"] }
-uuid = { version = "1.19", features = ["v7", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
+serde_json.workspace = true
+serde_valid.workspace = true
+serde.workspace = true
+url = { workspace = true, features = ["serde"] }
+uuid.workspace = true
+chrono.workspace = true
 
-error = { path = "../error" }
+error.workspace = true

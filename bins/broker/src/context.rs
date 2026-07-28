@@ -1,12 +1,12 @@
-use std::future::{Ready, ready};
 use std::sync::Arc;
 use std::time::Instant;
 
-use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
-use actix_web::http::header::HeaderMap;
-use actix_web::{Error as ActixError, FromRequest, HttpMessage, HttpRequest, web};
+use axum::extract::{FromRequestParts, Request, State};
+use axum::http::HeaderMap;
+use axum::http::request::Parts;
+use axum::middleware::Next;
+use axum::response::Response;
 use chrono::{DateTime, Utc};
-use futures_util::future::LocalBoxFuture;
 use sqlx::PgPool;
 use storage::Storage;
 use tracing::Instrument;
@@ -150,18 +150,20 @@ impl RequestContext {
     }
 }
 
-impl FromRequest for RequestContext {
-    type Error = error::Error;
-    type Future = Ready<Result<Self, Self::Error>>;
+impl<S> FromRequestParts<S> for RequestContext
+where
+    S: Send + Sync,
+{
+    type Rejection = error::Error;
 
-    fn from_request(req: &HttpRequest, _payload: &mut actix_web::dev::Payload) -> Self::Future {
-        let ctx = req
-            .extensions()
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let ctx = parts
+            .extensions
             .get::<RequestContext>()
             .cloned()
             .expect("RequestContext not found in request extensions");
 
-        ready(Ok(ctx))
+        Ok(ctx)
     }
 }
 
@@ -173,103 +175,70 @@ impl std::ops::Deref for RequestContext {
     }
 }
 
-pub struct RequestMiddleware;
+pub async fn request_middleware(State(ctx): State<Arc<Context>>, mut request: Request, next: Next) -> Response {
+    let method = request.method().clone();
+    let path = request.uri().path().to_string();
+    let headers = request.headers().clone();
+    let request_id = headers
+        .get(REQUEST_ID_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse().ok())
+        .unwrap_or_else(uuid::Uuid::now_v7);
+    let span = tracing::info_span!(
+        "http.request",
+        request_id = %request_id,
+        method = %method,
+        path = %path,
+        status = tracing::field::Empty,
+        elapsed_ms = tracing::field::Empty,
+    );
 
-impl<S, B> Transform<S, ServiceRequest> for RequestMiddleware
-where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = ActixError>,
-    S::Future: 'static,
-    B: 'static,
-{
-    type Response = ServiceResponse<B>;
-    type Error = ActixError;
-    type Transform = RequestMiddlewareService<S>;
-    type InitError = ();
-    type Future = Ready<Result<Self::Transform, Self::InitError>>;
+    request
+        .extensions_mut()
+        .insert(RequestContext::new(ctx, headers, request_id, span.clone()));
+    let completion_span = span.clone();
 
-    fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(Self::Transform { service }))
+    async move {
+        let started_at = Instant::now();
+        tracing::debug!("request started");
+        let response = next.run(request).await;
+        let elapsed_ms = started_at.elapsed().as_millis() as u64;
+        let status = response.status().as_u16();
+        completion_span.record("status", status);
+        completion_span.record("elapsed_ms", elapsed_ms);
+
+        if status >= 500 {
+            tracing::error!("request completed");
+        } else {
+            tracing::info!("request completed");
+        }
+
+        response
     }
+    .instrument(span)
+    .await
 }
 
-pub struct RequestMiddlewareService<S> {
-    service: S,
-}
+#[cfg(test)]
+mod tests {
+    use axum::http::{HeaderMap, HeaderValue};
 
-impl<S, B> Service<ServiceRequest> for RequestMiddlewareService<S>
-where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = ActixError>,
-    S::Future: 'static,
-    B: 'static,
-{
-    type Response = ServiceResponse<B>;
-    type Error = ActixError;
-    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-    forward_ready!(service);
-
-    fn call(&self, req: ServiceRequest) -> Self::Future {
-        let method = req.method().clone();
-        let path = req.path().to_string();
-        let ctx = req
-            .app_data::<web::Data<Context>>()
-            .expect("Context not found in app data")
-            .clone()
-            .into_inner();
-
-        let headers = req.headers().clone();
-        let request_id = headers
-            .get(REQUEST_ID_HEADER)
-            .and_then(|v| v.to_str().ok())
-            .map(String::from)
-            .unwrap_or_else(|| uuid::Uuid::now_v7().to_string())
-            .parse()
-            .unwrap_or_else(|_| uuid::Uuid::now_v7());
-
-        let span = tracing::info_span!(
-            "http.request",
-            request_id = %request_id,
-            method = %method,
-            path = %path,
-            status = tracing::field::Empty,
-            elapsed_ms = tracing::field::Empty,
+    #[test]
+    fn request_id_uses_a_valid_header() {
+        let expected = uuid::Uuid::now_v7();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            super::REQUEST_ID_HEADER,
+            HeaderValue::from_str(&expected.to_string()).unwrap(),
         );
+        assert_eq!(super::request_id(&headers), expected);
+    }
 
-        let ctx = RequestContext::new(ctx, headers, request_id, span.clone());
-        req.extensions_mut().insert(ctx);
-        let future = self.service.call(req);
-        let completion_span = span.clone();
-
-        Box::pin(
-            async move {
-                let started_at = Instant::now();
-                tracing::debug!("request started");
-                let result = future.await;
-                let elapsed_ms = started_at.elapsed().as_millis() as u64;
-
-                match &result {
-                    Ok(response) => {
-                        let status = response.status().as_u16();
-                        completion_span.record("status", status);
-                        completion_span.record("elapsed_ms", elapsed_ms);
-
-                        if status >= 500 {
-                            tracing::error!("request completed");
-                        } else {
-                            tracing::info!("request completed");
-                        }
-                    }
-                    Err(error) => {
-                        let status = error.as_response_error().status_code().as_u16();
-                        completion_span.record("status", status);
-                        completion_span.record("elapsed_ms", elapsed_ms);
-                        tracing::error!(%error, "request failed");
-                    }
-                }
-
-                result
-            }
-            .instrument(span),
-        )
+    #[test]
+    fn request_id_replaces_an_invalid_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(super::REQUEST_ID_HEADER, HeaderValue::from_static("invalid"));
+        let request_id = super::request_id(&headers);
+        assert_eq!(request_id.get_version(), Some(uuid::Version::SortRand));
     }
 }

@@ -25,15 +25,22 @@ impl Embedder {
 }
 
 fn pool(hidden: &Tensor, mask: &Tensor) -> Result<Tensor> {
-    let mask = mask.to_dtype(DType::F32).and_then(|mask| mask.unsqueeze(2))?;
+    let mask = mask
+        .to_dtype(DType::F32)
+        .and_then(|mask| mask.unsqueeze(2))
+        .map_err(error::ai)?;
 
-    let summed = hidden.broadcast_mul(&mask).and_then(|v| v.sum(1))?;
-    let counts = mask.sum(1)?;
+    let summed = hidden.broadcast_mul(&mask).and_then(|v| v.sum(1)).map_err(error::ai)?;
+    let counts = mask.sum(1).map_err(error::ai)?;
     summed.broadcast_div(&counts).map_err(error::ai)
 }
 
 fn normalize(v: &Tensor) -> Result<Tensor> {
-    let norm = v.sqr().and_then(|v| v.sum_keepdim(1)).and_then(|v| v.sqrt())?;
+    let norm = v
+        .sqr()
+        .and_then(|v| v.sum_keepdim(1))
+        .and_then(|v| v.sqrt())
+        .map_err(error::ai)?;
 
     v.broadcast_div(&norm).map_err(error::ai)
 }

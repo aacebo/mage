@@ -1,5 +1,6 @@
-use actix_web::{HttpResponse, get};
 use askama::Template;
+use axum::http::{StatusCode, header};
+use axum::response::{Html, IntoResponse, Response as HttpResponse};
 
 use crate::RequestContext;
 
@@ -11,8 +12,7 @@ struct ConsoleTemplate {
     reducer_version: u32,
 }
 
-#[get("")]
-async fn page(ctx: RequestContext) -> error::Result<HttpResponse> {
+pub async fn page(ctx: RequestContext) -> error::Result<HttpResponse> {
     let tenant_id = ctx.console().tenant_id.unwrap();
     let high_water_cursor = ctx
         .storage()
@@ -30,8 +30,5 @@ async fn page(ctx: RequestContext) -> error::Result<HttpResponse> {
 
     let body = template.render().map_err(error::http)?;
 
-    Ok(HttpResponse::Ok()
-        .insert_header(("Cache-Control", "no-store"))
-        .content_type("text/html; charset=utf-8")
-        .body(body))
+    Ok((StatusCode::OK, [(header::CACHE_CONTROL, "no-store")], Html(body)).into_response())
 }

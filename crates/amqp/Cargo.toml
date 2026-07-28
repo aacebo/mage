@@ -8,10 +8,10 @@ license.workspace = true
 doctest = false
 
 [dependencies]
-lapin = "2"
-futures-lite = "2"
-serde = { version = "1", features = ["default", "derive"] }
-serde_json = { version = "1" }
+lapin.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
-error = { path = "../error", features = ["amqp"] }
-types = { path = "../types" }
+error = { workspace = true, features = ["amqp"] }
+types.workspace = true

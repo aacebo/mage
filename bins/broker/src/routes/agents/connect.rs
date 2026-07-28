@@ -1,6 +1,5 @@
-use actix_web::{HttpRequest, HttpResponse, get, rt, web};
-use actix_ws::{AggregatedMessage, CloseCode, CloseReason};
-use futures_util::StreamExt;
+use axum::extract::ws::{CloseCode, CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
+use axum::response::Response;
 use serde_valid::Validate;
 use tracing::Instrument;
 
@@ -28,15 +27,7 @@ enum Command {
     },
 }
 
-#[get("/connect")]
-pub async fn connect(
-    ctx: RequestContext,
-    req: HttpRequest,
-    stream: web::Payload,
-    actor: extract::Agent,
-) -> error::Result<HttpResponse> {
-    let (response, session, stream) = actix_ws::handle(&req, stream)?;
-    let stream = stream.aggregate_continuations().max_continuation_size(MAX_MESSAGE_SIZE);
+pub async fn connect(ctx: RequestContext, actor: extract::Agent, upgrade: WebSocketUpgrade) -> Response {
     let span = tracing::info_span!(
         parent: ctx.span(),
         "agent.connection",
@@ -44,27 +35,23 @@ pub async fn connect(
         tenant_id = %actor.tenant_id,
     );
 
-    rt::spawn(run_session(ctx, session, stream, actor).instrument(span));
-    Ok(response)
+    upgrade
+        .max_message_size(MAX_MESSAGE_SIZE)
+        .on_upgrade(move |socket| run_session(ctx, socket, actor).instrument(span))
 }
 
-async fn run_session(
-    ctx: RequestContext,
-    mut session: actix_ws::Session,
-    mut stream: actix_ws::AggregatedMessageStream,
-    actor: extract::Agent,
-) {
+async fn run_session(ctx: RequestContext, mut socket: WebSocket, actor: extract::Agent) {
     tracing::debug!("opening agent connection");
     let actor = match ctx.storage().actors().connect(actor.id).await {
         Ok(Some(actor)) => actor,
         Ok(None) => {
             tracing::error!("agent disappeared before connection state could be updated");
-            close(session, CloseCode::Error, "failed to update agent connection").await;
+            close(&mut socket, close_code::ERROR, "failed to update agent connection").await;
             return;
         }
         Err(error) => {
             tracing::error!(%error, "failed to update agent connection state");
-            close(session, CloseCode::Error, "failed to update agent connection").await;
+            close(&mut socket, close_code::ERROR, "failed to update agent connection").await;
             return;
         }
     };
@@ -74,12 +61,12 @@ async fn run_session(
         Err(error) => {
             tracing::error!(%error, "failed to enqueue agent connection event");
             let _ = ctx.storage().actors().disconnect(actor.id).await;
-            close(session, CloseCode::Error, "failed to persist connection event").await;
+            close(&mut socket, close_code::ERROR, "failed to persist connection event").await;
             return;
         }
     };
 
-    if emit(&mut session, &connection_event).await.is_err() {
+    if emit(&mut socket, &connection_event).await.is_err() {
         tracing::warn!("failed to emit agent connection event");
         disconnect(&ctx, actor.id).await;
         return;
@@ -90,12 +77,12 @@ async fn run_session(
         "agent connected"
     );
 
-    while let Some(message) = stream.next().await {
+    while let Some(message) = socket.recv().await {
         match message {
-            Ok(AggregatedMessage::Text(text)) => {
-                let Ok(command) = serde_json::from_str::<Command>(&text) else {
+            Ok(Message::Text(text)) => {
+                let Ok(command) = serde_json::from_str::<Command>(text.as_str()) else {
                     tracing::warn!("closing agent connection after invalid command");
-                    close(session.clone(), CloseCode::Invalid, "invalid command").await;
+                    close(&mut socket, close_code::INVALID, "invalid command").await;
                     break;
                 };
 
@@ -109,7 +96,7 @@ async fn run_session(
 
                 if let Err(error) = content.validate() {
                     tracing::warn!(%error, "closing agent connection after invalid message content");
-                    close(session.clone(), CloseCode::Invalid, "invalid message content").await;
+                    close(&mut socket, close_code::INVALID, "invalid message content").await;
                     break;
                 }
 
@@ -123,12 +110,12 @@ async fn run_session(
                         Ok(Some(_)) => {}
                         Ok(None) => {
                             tracing::warn!(%chat_id, "agent attempted to send to an unavailable chat");
-                            close(session.clone(), CloseCode::Policy, "chat is unavailable for this agent").await;
+                            close(&mut socket, close_code::POLICY, "chat is unavailable for this agent").await;
                             break;
                         }
                         Err(error) => {
                             tracing::error!(%error, %chat_id, "failed to validate agent chat access");
-                            close(session.clone(), CloseCode::Error, "failed to validate chat access").await;
+                            close(&mut socket, close_code::ERROR, "failed to validate chat access").await;
                             break;
                         }
                     }
@@ -152,26 +139,20 @@ async fn run_session(
                     Ok(event) => event,
                     Err(error) => {
                         tracing::error!(%error, %trace_id, ?chat_id, "failed to enqueue agent message");
-                        close(session.clone(), CloseCode::Error, "failed to persist message").await;
+                        close(&mut socket, close_code::ERROR, "failed to persist message").await;
                         break;
                     }
                 };
 
-                if emit(&mut session, &event).await.is_err() {
+                if emit(&mut socket, &event).await.is_err() {
                     tracing::warn!(%trace_id, ?chat_id, "failed to return agent message event");
                     break;
                 }
 
                 tracing::info!(%trace_id, ?chat_id, event_id = %event.id, "accepted agent message");
             }
-            Ok(AggregatedMessage::Ping(bytes)) => {
-                if session.pong(&bytes).await.is_err() {
-                    tracing::debug!("agent connection closed while sending pong");
-                    break;
-                }
-            }
-            Ok(AggregatedMessage::Pong(_)) => {}
-            Ok(AggregatedMessage::Close(reason)) => {
+            Ok(Message::Ping(_) | Message::Pong(_)) => {}
+            Ok(Message::Close(reason)) => {
                 tracing::debug!(?reason, "agent requested connection close");
                 break;
             }
@@ -179,9 +160,9 @@ async fn run_session(
                 tracing::warn!(%error, "agent WebSocket stream failed");
                 break;
             }
-            Ok(AggregatedMessage::Binary(_)) => {
+            Ok(Message::Binary(_)) => {
                 tracing::warn!("closing agent connection after binary command");
-                close(session.clone(), CloseCode::Unsupported, "text commands required").await;
+                close(&mut socket, close_code::UNSUPPORTED, "text commands required").await;
                 break;
             }
         }
@@ -190,8 +171,11 @@ async fn run_session(
     disconnect(&ctx, actor.id).await;
 }
 
-async fn emit(session: &mut actix_ws::Session, event: &types::events::Event) -> error::Result<()> {
-    session.text(serde_json::to_string(event)?).await.map_err(error::http)
+async fn emit(socket: &mut WebSocket, event: &types::events::Event) -> error::Result<()> {
+    socket
+        .send(Message::Text(serde_json::to_string(event)?.into()))
+        .await
+        .map_err(error::http)
 }
 
 async fn disconnect(ctx: &RequestContext, actor_id: uuid::Uuid) {
@@ -217,11 +201,11 @@ async fn disconnect(ctx: &RequestContext, actor_id: uuid::Uuid) {
     tracing::info!(%actor_id, ?instances, "agent disconnected");
 }
 
-async fn close(session: actix_ws::Session, code: CloseCode, description: &str) {
-    let _ = session
-        .close(Some(CloseReason {
+async fn close(socket: &mut WebSocket, code: CloseCode, description: &str) {
+    let _ = socket
+        .send(Message::Close(Some(CloseFrame {
             code,
-            description: Some(description.to_string()),
-        }))
+            reason: description.to_string().into(),
+        })))
         .await;
 }

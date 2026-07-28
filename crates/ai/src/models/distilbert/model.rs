@@ -13,7 +13,7 @@ pub struct DistilBert {
 impl DistilBert {
     pub fn new(vars: VarBuilder, config: &Config) -> Result<Self> {
         Ok(Self {
-            inner: distilbert::DistilBertModel::load(vars, &config.to_candle()?)?,
+            inner: distilbert::DistilBertModel::load(vars, &config.to_candle()?).map_err(error::ai)?,
         })
     }
 

@@ -11,16 +11,20 @@ doctest = false
 workspace = true
 
 [dependencies]
-awc = { version = "3.8" }
-actix-codec = { version = "0.5" }
+tokio = { workspace = true, features = ["net"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
 
-serde_json = { version = "1" }
-serde_valid = { version = "2" }
-serde = { version = "1", features = ["default", "derive"] }
+serde_json.workspace = true
+serde_valid.workspace = true
+serde.workspace = true
 
-uuid = { version = "1.19", features = ["v7", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
-futures-util = { version = "0.3" }
+uuid.workspace = true
+chrono.workspace = true
+futures-util = { workspace = true, features = ["sink"] }
 
-error = { path = "../error" }
-types = { path = "../types" }
+error.workspace = true
+types.workspace = true
+
+[dev-dependencies]
+axum = { workspace = true, features = ["http1", "tokio", "ws"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }

@@ -1,7 +1,12 @@
 mod get;
 
-use actix_web::{Scope, web};
+use std::sync::Arc;
 
-pub fn scope() -> Scope {
-    web::scope("/logs").service(get::get)
+use axum::Router;
+use axum::routing::get;
+
+use crate::Context;
+
+pub fn router() -> Router<Arc<Context>> {
+    Router::new().route("/", get(get::get))
 }

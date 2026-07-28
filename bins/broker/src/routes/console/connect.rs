@@ -1,9 +1,10 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
-use actix_web::{HttpRequest, HttpResponse, get, rt, web};
-use actix_ws::{AggregatedMessage, CloseCode, CloseReason};
-use futures_util::StreamExt;
+use axum::body::Bytes;
+use axum::extract::Query;
+use axum::extract::ws::{CloseCode, CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
+use axum::response::Response;
 use tracing::Instrument;
 
 use crate::RequestContext;
@@ -12,21 +13,13 @@ const REPLAY_BATCH_SIZE: usize = 100;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(20);
 
 #[derive(Debug, serde::Deserialize)]
-struct ReplayQuery {
+pub(super) struct ReplayQuery {
     after_id: Option<uuid::Uuid>,
 }
 
-#[get("/connect")]
-pub async fn connect(
-    ctx: RequestContext,
-    req: HttpRequest,
-    payload: web::Payload,
-    query: web::Query<ReplayQuery>,
-) -> error::Result<HttpResponse> {
+pub async fn connect(ctx: RequestContext, Query(query): Query<ReplayQuery>, upgrade: WebSocketUpgrade) -> Response {
     let tenant_id = ctx.console().tenant_id.unwrap();
     let cursor = query.after_id;
-    let (response, session, stream) = actix_ws::handle(&req, payload)?;
-    let stream = stream.aggregate_continuations().max_continuation_size(64 * 1024);
     let span = tracing::info_span!(
         parent: ctx.span(),
         "console.connection",
@@ -34,29 +27,24 @@ pub async fn connect(
         replay_after_id = ?cursor,
     );
 
-    rt::spawn(run_stream(ctx, tenant_id, cursor, session, stream).instrument(span));
-    Ok(response)
+    upgrade
+        .max_message_size(64 * 1024)
+        .on_upgrade(move |socket| run_stream(ctx, tenant_id, cursor, socket).instrument(span))
 }
 
-async fn run_stream(
-    ctx: RequestContext,
-    tenant_id: uuid::Uuid,
-    cursor: Option<uuid::Uuid>,
-    session: actix_ws::Session,
-    stream: actix_ws::AggregatedMessageStream,
-) {
+async fn run_stream(ctx: RequestContext, tenant_id: uuid::Uuid, cursor: Option<uuid::Uuid>, mut socket: WebSocket) {
     let binding = "#".parse().expect("the console event binding is valid");
     let mut events = match ctx.socket().subscribe(&[binding]).await {
         Ok(events) => events,
         Err(error) => {
             tracing::error!(%error, "failed to create console AMQP subscription");
-            close(session, CloseCode::Error, "event subscription failed").await;
+            close(&mut socket, close_code::ERROR, "event subscription failed").await;
             return;
         }
     };
 
     tracing::debug!("created exclusive console AMQP subscription");
-    run_event_stream(&ctx, tenant_id, cursor, session, stream, &mut events).await;
+    run_event_stream(&ctx, tenant_id, cursor, socket, &mut events).await;
 
     if let Err(error) = events.cancel().await {
         tracing::warn!(%error, "failed to cancel console AMQP subscription");
@@ -69,8 +57,7 @@ async fn run_event_stream(
     ctx: &RequestContext,
     tenant_id: uuid::Uuid,
     mut cursor: Option<uuid::Uuid>,
-    mut session: actix_ws::Session,
-    mut stream: actix_ws::AggregatedMessageStream,
+    mut socket: WebSocket,
     events: &mut amqp::SocketConsumer<'_>,
 ) {
     let mut sent = HashSet::new();
@@ -90,7 +77,7 @@ async fn run_event_stream(
             Ok(result) => result,
             Err(error) => {
                 tracing::error!(%error, "failed to replay console events");
-                close(session, CloseCode::Error, "event replay failed").await;
+                close(&mut socket, close_code::ERROR, "event replay failed").await;
                 return;
             }
         };
@@ -101,7 +88,7 @@ async fn run_event_stream(
             cursor = Some(event.id);
             sent.insert(event.id);
 
-            if let Err(error) = emit(&mut session, &event).await {
+            if let Err(error) = emit(&mut socket, &event).await {
                 tracing::debug!(%error, event_id = %event.id, "console disconnected during event replay");
                 return;
             }
@@ -120,16 +107,10 @@ async fn run_event_stream(
 
     loop {
         tokio::select! {
-            message = stream.next() => {
+            message = socket.recv() => {
                 match message {
-                    Some(Ok(AggregatedMessage::Ping(bytes))) => {
-                        if session.pong(&bytes).await.is_err() {
-                            tracing::debug!("console disconnected while sending pong");
-                            return;
-                        }
-                    }
-                    Some(Ok(AggregatedMessage::Pong(_))) => {}
-                    Some(Ok(AggregatedMessage::Close(reason))) => {
+                    Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
+                    Some(Ok(Message::Close(reason))) => {
                         tracing::debug!(?reason, "console requested connection close");
                         return;
                     }
@@ -141,9 +122,9 @@ async fn run_event_stream(
                         tracing::debug!("console WebSocket stream ended");
                         return;
                     }
-                    Some(Ok(AggregatedMessage::Text(_) | AggregatedMessage::Binary(_))) => {
+                    Some(Ok(Message::Text(_) | Message::Binary(_))) => {
                         tracing::warn!("console attempted to write to its read-only event stream");
-                        close(session, CloseCode::Policy, "console stream is read only").await;
+                        close(&mut socket, close_code::POLICY, "console stream is read only").await;
                         return;
                     }
                 }
@@ -153,18 +134,18 @@ async fn run_event_stream(
                     Some(Ok(delivery)) => delivery,
                     Some(Err(error)) => {
                         tracing::error!(%error, "failed to consume console AMQP event");
-                        close(session, CloseCode::Error, "event subscription failed").await;
+                        close(&mut socket, close_code::ERROR, "event subscription failed").await;
                         return;
                     }
                     None => {
                         tracing::warn!("console AMQP subscription ended");
-                        close(session, CloseCode::Again, "event subscription ended").await;
+                        close(&mut socket, close_code::AGAIN, "event subscription ended").await;
                         return;
                     }
                 };
 
                 if event.tenant_id == tenant_id && sent.insert(event.id) {
-                    if let Err(error) = emit(&mut session, &event).await {
+                    if let Err(error) = emit(&mut socket, &event).await {
                         tracing::debug!(%error, event_id = %event.id, trace_id = %event.trace_id, "console disconnected during live event");
                         return;
                     }
@@ -188,12 +169,12 @@ async fn run_event_stream(
                         trace_id = %event.trace_id,
                         "failed to acknowledge console AMQP event"
                     );
-                    close(session, CloseCode::Error, "event acknowledgement failed").await;
+                    close(&mut socket, close_code::ERROR, "event acknowledgement failed").await;
                     return;
                 }
             }
             _ = heartbeat.tick() => {
-                if session.ping(b"neuron").await.is_err() {
+                if socket.send(Message::Ping(Bytes::from_static(b"neuron"))).await.is_err() {
                     tracing::debug!("console disconnected while sending heartbeat");
                     return;
                 }
@@ -202,15 +183,18 @@ async fn run_event_stream(
     }
 }
 
-async fn emit(session: &mut actix_ws::Session, event: &types::events::Event) -> error::Result<()> {
-    session.text(serde_json::to_string(event)?).await.map_err(error::http)
+async fn emit(socket: &mut WebSocket, event: &types::events::Event) -> error::Result<()> {
+    socket
+        .send(Message::Text(serde_json::to_string(event)?.into()))
+        .await
+        .map_err(error::http)
 }
 
-async fn close(session: actix_ws::Session, code: CloseCode, description: &str) {
-    let _ = session
-        .close(Some(CloseReason {
+async fn close(socket: &mut WebSocket, code: CloseCode, description: &str) {
+    let _ = socket
+        .send(Message::Close(Some(CloseFrame {
             code,
-            description: Some(description.to_string()),
-        }))
+            reason: description.to_string().into(),
+        })))
         .await;
 }
