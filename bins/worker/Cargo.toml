@@ -16,7 +16,7 @@ tokio = { workspace = true, features = ["time", "macros", "rt-multi-thread"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
-ai = { path = "../../crates/ai" }
+ai.workspace = true
 amqp.workspace = true
 error = { workspace = true, features = ["amqp", "storage"] }
 storage.workspace = true

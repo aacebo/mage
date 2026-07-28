@@ -24,8 +24,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = { version = "2.5" }
 uuid = { version = "1.19", features = ["v7", "serde"] }
 
+ai = { path = "crates/ai" }
 amqp = { path = "crates/amqp" }
 error = { path = "crates/error" }
+proto = { path = "crates/proto" }
 storage = { path = "crates/storage" }
 types = { path = "crates/types" }
 
