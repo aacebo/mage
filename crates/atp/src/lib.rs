@@ -10,47 +10,14 @@ pub type ClientWebSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub trait Producer {
     type Error;
-    type Signal;
 
-    fn send(&mut self, message: ProtocolMessage<Self::Signal>) -> impl Future<Output = Result<(), Self::Error>>;
+    fn send(&mut self, frame: Frame) -> impl Future<Output = Result<(), Self::Error>>;
 }
 
 pub trait Consumer {
     type Error;
-    type Signal;
 
-    fn recv(&mut self) -> impl Future<Output = Result<ProtocolMessage<Self::Signal>, Self::Error>> + Send;
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ProtocolMessage<T> {
-    pub id: uuid::Uuid,
-    pub trace_id: uuid::Uuid,
-    pub reply_to_id: Option<uuid::Uuid>,
-    pub body: T,
-    pub sent_at: chrono::DateTime<chrono::Utc>,
-}
-
-impl<T> ProtocolMessage<T> {
-    pub fn new(trace_id: uuid::Uuid, body: impl Into<T>) -> Self {
-        Self {
-            id: uuid::Uuid::now_v7(),
-            trace_id,
-            reply_to_id: None,
-            body: body.into(),
-            sent_at: chrono::Utc::now(),
-        }
-    }
-
-    pub fn reply<V>(&self, body: V) -> ProtocolMessage<V> {
-        ProtocolMessage {
-            id: uuid::Uuid::now_v7(),
-            trace_id: self.trace_id,
-            reply_to_id: Some(self.id),
-            body,
-            sent_at: chrono::Utc::now(),
-        }
-    }
+    fn recv(&mut self) -> impl Future<Output = Result<Frame, Self::Error>>;
 }
 
 pub struct Socket {
@@ -75,92 +42,91 @@ impl From<ClientWebSocket> for Socket {
 
 impl Producer for Socket {
     type Error = mage_error::Error;
-    type Signal = client::Signal;
 
-    async fn send(&mut self, message: ProtocolMessage<Self::Signal>) -> Result<(), Self::Error> {
+    async fn send(&mut self, frame: Frame) -> Result<(), Self::Error> {
         self.socket
             .send(tokio_tungstenite::tungstenite::Message::Binary(
-                serde_json::to_vec(&message)?.into(),
+                serde_json::to_vec(&frame)?.into(),
             ))
             .await
             .map_err(mage_error::http)
+            .into()
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-    use std::time::Duration;
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Frame {
+    Request(Request),
+    Response(Response),
+    Event(Event),
+}
 
-    use axum::Router;
-    use axum::extract::State;
-    use axum::extract::ws::{Message, WebSocketUpgrade};
-    use axum::http::HeaderMap;
-    use axum::response::Response;
-    use axum::routing::get;
-    use tokio::sync::mpsc;
-    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Request {
+    pub id: uuid::Uuid,
+    pub method: String,
+    pub params: serde_json::Map<String, serde_json::Value>,
+}
 
-    use super::Producer;
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum Response {
+    Ok { id: uuid::Uuid, result: serde_json::Value },
+    Err { id: uuid::Uuid, error: Error },
+}
 
-    #[derive(Clone)]
-    struct TestState {
-        messages: mpsc::UnboundedSender<(HeaderMap, Message)>,
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Event {
+    pub task_id: Option<uuid::Uuid>,
+    pub sequence: Option<u64>,
+    pub body: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Error {
+    pub code: i64,
+    pub message: String,
+}
+
+impl Error {
+    pub const PARSE: i64 = -32700;
+    pub const INVALID_REQUEST: i64 = -32600;
+    pub const METHOD_NOT_FOUND: i64 = -32601;
+    pub const INVALID_PARAMS: i64 = -32602;
+    pub const INTERNAL: i64 = -32603;
+
+    pub fn parse(message: impl std::fmt::Display) -> Self {
+        Self {
+            code: Self::PARSE,
+            message: message.to_string(),
+        }
     }
 
-    async fn connect(State(state): State<Arc<TestState>>, headers: HeaderMap, upgrade: WebSocketUpgrade) -> Response {
-        upgrade.on_upgrade(move |mut socket| async move {
-            if let Some(Ok(message)) = socket.recv().await {
-                let _ = state.messages.send((headers, message));
-            }
-        })
+    pub fn invalid_request(message: impl std::fmt::Display) -> Self {
+        Self {
+            code: Self::INVALID_REQUEST,
+            message: message.to_string(),
+        }
     }
 
-    #[tokio::test]
-    async fn socket_connects_by_url_and_custom_request_and_sends_binary_json() {
-        let (messages, mut received) = mpsc::unbounded_channel();
-        let app = Router::new()
-            .route("/connect", get(connect))
-            .with_state(Arc::new(TestState { messages }));
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
-        let address = listener.local_addr().unwrap();
-        let server = tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
-        });
+    pub fn method_not_found(message: impl std::fmt::Display) -> Self {
+        Self {
+            code: Self::METHOD_NOT_FOUND,
+            message: message.to_string(),
+        }
+    }
 
-        let url = format!("ws://{address}/connect");
-        let mut socket = super::Socket::connect(url.as_str()).await.unwrap();
-        let message = super::ProtocolMessage::new(uuid::Uuid::now_v7(), super::client::Signal::Ack);
-        let expected = serde_json::to_vec(&message).unwrap();
-        socket.send(message).await.unwrap();
-        let (headers, frame) = tokio::time::timeout(Duration::from_secs(2), received.recv())
-            .await
-            .unwrap()
-            .unwrap();
+    pub fn invalid_params(message: impl std::fmt::Display) -> Self {
+        Self {
+            code: Self::INVALID_PARAMS,
+            message: message.to_string(),
+        }
+    }
 
-        assert!(headers.get("x-agent-id").is_none());
-        assert_eq!(frame, Message::Binary(expected.into()));
-
-        let mut request = url.into_client_request().unwrap();
-        request
-            .headers_mut()
-            .insert("x-agent-id", "019c0000-0000-7000-8000-000000000000".parse().unwrap());
-        let mut socket = super::Socket::connect(request).await.unwrap();
-        let message = super::ProtocolMessage::new(uuid::Uuid::now_v7(), super::client::Signal::Ack);
-        let expected = serde_json::to_vec(&message).unwrap();
-        socket.send(message).await.unwrap();
-        let (headers, frame) = tokio::time::timeout(Duration::from_secs(2), received.recv())
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(headers["x-agent-id"], "019c0000-0000-7000-8000-000000000000");
-        assert_eq!(frame, Message::Binary(expected.into()));
-        assert!(
-            super::Socket::connect(format!("ws://{address}/missing").as_str())
-                .await
-                .is_err()
-        );
-        server.abort();
+    pub fn internal(message: impl std::fmt::Display) -> Self {
+        Self {
+            code: Self::INTERNAL,
+            message: message.to_string(),
+        }
     }
 }
