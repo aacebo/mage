@@ -12,7 +12,7 @@ flowchart TB
         broker["Broker API<br/><small>HTTP + WebSocket</small>"]
         postgres[("PostgreSQL + pgvector<br/><small>events · actors · chats · messages</small>")]
         exchange{{"RabbitMQ<br/><small>events · topic exchange</small>"}}
-        worker_queue[["neuron.worker.events<br/><small>durable shared queue</small>"]]
+        worker_queue[["mage.worker.events<br/><small>durable shared queue</small>"]]
         console_queue[["amq.gen-*<br/><small>exclusive · auto-delete · #</small>"]]
         worker["Semantic worker<br/><small>embed · rank · confidence policy</small>"]
     end

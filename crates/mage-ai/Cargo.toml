@@ -1,0 +1,35 @@
+[package]
+name = "mage-ai"
+description = "Mage AI routines (embeddings, entities, keywords, PII, sentiment, summarization)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["rc"] }
+serde_json.workspace = true
+candle-core = { version = "0.11" }
+candle-nn = { version = "0.11" }
+candle-transformers = { version = "0.11" }
+tokenizers = { version = "0.22" }
+hf-hub = { version = "0.5" }
+reqwest = { workspace = true, features = ["blocking", "charset", "default-tls", "http2", "json", "system-proxy"] }
+url.workspace = true
+
+mage-error = { workspace = true, features = ["ai"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+candle-core = { version = "0.11", features = ["accelerate"] }
+candle-nn = { version = "0.11", features = ["accelerate"] }
+candle-transformers = { version = "0.11", features = ["accelerate"] }
+
+[target.'cfg(all(target_arch = "x86_64", target_os = "linux"))'.dependencies]
+candle-core = { version = "0.11", features = ["mkl"] }
+candle-nn = { version = "0.11", features = ["mkl"] }
+candle-transformers = { version = "0.11", features = ["mkl"] }

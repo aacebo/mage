@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["bins/*", "crates/*"]
-default-members = ["bins/*", "crates/*"]
+members = ["crates/*"]
+default-members = ["crates/*"]
 
 [workspace.package]
 version = "0.0.0"
@@ -24,12 +24,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = { version = "2.5" }
 uuid = { version = "1.19", features = ["v7", "serde"] }
 
-ai = { path = "crates/ai" }
-amqp = { path = "crates/amqp" }
-error = { path = "crates/error" }
-proto = { path = "crates/proto" }
-storage = { path = "crates/storage" }
-types = { path = "crates/types" }
+atp = { path = "crates/atp" }
+mage-ai = { path = "crates/mage-ai" }
+mage-amqp = { path = "crates/mage-amqp" }
+mage-error = { path = "crates/mage-error" }
+mage-storage = { path = "crates/mage-storage" }
+mage-types = { path = "crates/mage-types" }
 
 [workspace.lints.clippy]
 large_enum_variant = "allow"

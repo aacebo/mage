@@ -1,0 +1,17 @@
+[package]
+name = "mage-amqp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+doctest = false
+
+[dependencies]
+lapin.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+mage-error = { workspace = true, features = ["amqp"] }
+mage-types.workspace = true

@@ -49,22 +49,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ai"
-version = "0.0.0"
-dependencies = [
- "candle-core",
- "candle-nn",
- "candle-transformers",
- "error",
- "hf-hub",
- "reqwest 0.13.4",
- "serde",
- "serde_json",
- "tokenizers",
- "url",
-]
-
-[[package]]
 name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -116,18 +100,6 @@ dependencies = [
  "amq-protocol-types",
  "percent-encoding",
  "url",
-]
-
-[[package]]
-name = "amqp"
-version = "0.0.0"
-dependencies = [
- "error",
- "futures-util",
- "lapin",
- "serde",
- "serde_json",
- "types",
 ]
 
 [[package]]
@@ -391,6 +363,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "atp"
+version = "0.0.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "futures-util",
+ "mage-error",
+ "mage-types",
+ "serde",
+ "serde_json",
+ "serde_valid",
+ "tokio",
+ "tokio-tungstenite 0.30.0",
+ "uuid",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -575,29 +564,6 @@ dependencies = [
  "futures-io",
  "futures-lite 2.6.1",
  "piper",
-]
-
-[[package]]
-name = "broker"
-version = "0.0.0"
-dependencies = [
- "amqp",
- "askama",
- "axum",
- "chrono",
- "error",
- "serde",
- "serde_json",
- "serde_valid",
- "sqlx",
- "storage",
- "tokio",
- "tower",
- "tower-http 0.7.0",
- "tracing",
- "tracing-subscriber",
- "types",
- "uuid",
 ]
 
 [[package]]
@@ -1354,21 +1320,6 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "error"
-version = "0.0.0"
-dependencies = [
- "axum",
- "lapin",
- "reqwest 0.13.4",
- "serde",
- "serde_json",
- "serde_valid",
- "sqlx",
- "tokio",
- "url",
 ]
 
 [[package]]
@@ -2599,6 +2550,119 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "670fdfda89751bc4a84ac13eaa63e205cf0fd22b4c9a5fbfa085b63c1f1d3a30"
 
 [[package]]
+name = "mage-ai"
+version = "0.0.0"
+dependencies = [
+ "candle-core",
+ "candle-nn",
+ "candle-transformers",
+ "hf-hub",
+ "mage-error",
+ "reqwest 0.13.4",
+ "serde",
+ "serde_json",
+ "tokenizers",
+ "url",
+]
+
+[[package]]
+name = "mage-amqp"
+version = "0.0.0"
+dependencies = [
+ "futures-util",
+ "lapin",
+ "mage-error",
+ "mage-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "mage-broker"
+version = "0.0.0"
+dependencies = [
+ "askama",
+ "axum",
+ "chrono",
+ "mage-amqp",
+ "mage-error",
+ "mage-storage",
+ "mage-types",
+ "serde",
+ "serde_json",
+ "serde_valid",
+ "sqlx",
+ "tokio",
+ "tower",
+ "tower-http 0.7.0",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "mage-error"
+version = "0.0.0"
+dependencies = [
+ "axum",
+ "lapin",
+ "reqwest 0.13.4",
+ "serde",
+ "serde_json",
+ "serde_valid",
+ "sqlx",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "mage-storage"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "mage-error",
+ "mage-types",
+ "pgvector",
+ "serde",
+ "serde_json",
+ "serde_valid",
+ "sqlx",
+ "uuid",
+]
+
+[[package]]
+name = "mage-types"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "mage-error",
+ "rand 0.10.2",
+ "serde",
+ "serde_json",
+ "serde_valid",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "mage-worker"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "mage-ai",
+ "mage-amqp",
+ "mage-error",
+ "mage-storage",
+ "mage-types",
+ "serde",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "matchers"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3171,23 +3235,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "proto"
-version = "0.0.0"
-dependencies = [
- "axum",
- "chrono",
- "error",
- "futures-util",
- "serde",
- "serde_json",
- "serde_valid",
- "tokio",
- "tokio-tungstenite 0.30.0",
- "types",
- "uuid",
 ]
 
 [[package]]
@@ -4346,21 +4393,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
-name = "storage"
-version = "0.0.0"
-dependencies = [
- "chrono",
- "error",
- "pgvector",
- "serde",
- "serde_json",
- "serde_valid",
- "sqlx",
- "types",
- "uuid",
-]
-
-[[package]]
 name = "stringprep"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4966,20 +4998,6 @@ name = "typenum"
 version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40ce102ab67701b8526c123c1bab5cbe42d7040ccfd0f64af1a385808d2f43de"
-
-[[package]]
-name = "types"
-version = "0.0.0"
-dependencies = [
- "chrono",
- "error",
- "rand 0.10.2",
- "serde",
- "serde_json",
- "serde_valid",
- "url",
- "uuid",
-]
 
 [[package]]
 name = "unicase"
@@ -5731,24 +5749,6 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser",
-]
-
-[[package]]
-name = "worker"
-version = "0.0.0"
-dependencies = [
- "ai",
- "amqp",
- "chrono",
- "error",
- "serde",
- "sqlx",
- "storage",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "types",
- "uuid",
 ]
 
 [[package]]

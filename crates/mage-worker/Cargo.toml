@@ -1,0 +1,23 @@
+[package]
+name = "mage-worker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+sqlx = { workspace = true, features = ["runtime-tokio", "postgres"] }
+tokio = { workspace = true, features = ["time", "macros", "rt-multi-thread"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+mage-ai.workspace = true
+mage-amqp.workspace = true
+mage-error = { workspace = true, features = ["amqp", "storage"] }
+mage-storage.workspace = true
+mage-types.workspace = true

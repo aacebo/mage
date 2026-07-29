@@ -1,0 +1,503 @@
+{% extends "../base.html" %}
+
+{% block title %}Mage Console{% endblock %}
+
+{% block content %}
+<script id="console-config" type="application/json">{{ self | json(4) | safe }}</script>
+
+<main class="console-shell" x-data="mageConsole" x-cloak>
+    <header class="topbar">
+        <div class="brand">
+            <span class="brand-mark">N</span>
+            <div>
+                <strong>Mage</strong>
+                <span>event console</span>
+            </div>
+        </div>
+        <div class="topbar-meta">
+            <span class="tenant"><span>tenant</span> <code x-text="compactId(config.tenant_id)"></code></span>
+            <span class="connection-pill" :class="streamStatus">
+                <i></i>
+                <span x-text="streamStatus"></span>
+            </span>
+            <button class="button ghost small" type="button" @click="resetLocalState()">Reset local state</button>
+        </div>
+    </header>
+
+    <aside class="sidebar">
+        <section class="sidebar-heading">
+            <span class="eyebrow">Agents</span>
+            <span class="count" x-text="agents.length"></span>
+        </section>
+
+        <div class="agent-list">
+            <template x-if="agents.length === 0">
+                <div class="empty compact">
+                    <strong>No agent events yet</strong>
+                    <span>New actor events will appear here.</span>
+                </div>
+            </template>
+            <template x-for="agent in agents" :key="agent.id">
+                <button
+                    type="button"
+                    class="agent-row"
+                    :class="{ active: selectedAgentId === agent.id }"
+                    @click="selectAgent(agent.id)"
+                >
+                    <span class="agent-avatar" :class="agent.status" x-text="agent.name.slice(0, 2).toUpperCase()"></span>
+                    <span class="agent-copy">
+                        <strong x-text="agent.name"></strong>
+                        <small>
+                            <i class="status-dot" :class="agent.status"></i>
+                            <span x-text="agent.status"></span>
+                            <span>·</span>
+                            <span x-text="`${agent.instances || 0} conn`"></span>
+                        </small>
+                    </span>
+                    <span class="chevron">›</span>
+                </button>
+            </template>
+        </div>
+
+        <section class="agent-connect">
+            <div class="section-label">
+                <span>Agent socket</span>
+                <span class="socket-state" :class="agentStatus" x-text="agentStatus"></span>
+            </div>
+            <select
+                class="field"
+                :value="selectedAgentId"
+                @change="selectAgent($event.target.value)"
+                aria-label="Selected agent"
+            >
+                <option value="">Select agent</option>
+                <template x-for="agent in agents" :key="agent.id">
+                    <option :value="agent.id" x-text="agent.name"></option>
+                </template>
+            </select>
+            <input
+                class="field mono"
+                type="password"
+                x-model="agentSecret"
+                placeholder="Agent secret"
+                autocomplete="off"
+                aria-label="Agent secret"
+            >
+            <div class="button-row">
+                <button class="button primary" type="button" @click="connectAgent()" :disabled="agentStatus === 'connecting'">
+                    Connect
+                </button>
+                <button class="button ghost" type="button" @click="disconnectAgent()" :disabled="agentStatus === 'disconnected'">
+                    Close
+                </button>
+            </div>
+            <p class="microcopy">Secrets stay in this browser session.</p>
+        </section>
+    </aside>
+
+    <section class="workspace">
+        <nav class="tabs" aria-label="Console sections">
+            <button type="button" :class="{ active: tab === 'compose' }" @click="selectTab('compose')">Compose</button>
+            <button type="button" :class="{ active: tab === 'chat' }" @click="selectTab('chat')">Live chat</button>
+            <button type="button" :class="{ active: tab === 'topology' }" @click="selectTab('topology')">Topology</button>
+            <button type="button" :class="{ active: tab === 'traces' }" @click="selectTab('traces')">
+                Traces <span x-text="traceItems.length"></span>
+            </button>
+        </nav>
+
+        <section class="view compose-view" x-show="tab === 'compose'">
+            <div class="view-heading">
+                <div>
+                    <span class="eyebrow">Message composer</span>
+                    <h1>Send an event into the system.</h1>
+                    <p>The generated trace will open as soon as its first persisted event arrives.</p>
+                </div>
+                <div class="segmented" role="group" aria-label="Sender role">
+                    <button type="button" :class="{ active: senderMode === 'user' }" @click="senderMode = 'user'">User</button>
+                    <button type="button" :class="{ active: senderMode === 'agent' }" @click="senderMode = 'agent'">Agent</button>
+                </div>
+            </div>
+
+            <form class="composer" @submit.prevent="sendMessage()" @keydown.meta.enter.prevent="sendMessage()" @keydown.ctrl.enter.prevent="sendMessage()">
+                <div class="identity-grid" x-show="senderMode === 'user'">
+                    <label>
+                        <span>External ID</span>
+                        <input class="field mono" x-model="userExternalId" required>
+                    </label>
+                    <label>
+                        <span>Display name</span>
+                        <input class="field" x-model="userName" required>
+                    </label>
+                </div>
+
+                <div class="agent-sender" x-show="senderMode === 'agent'">
+                    <span class="agent-avatar small" :class="agentStatus === 'connected' ? 'online' : 'offline'">WS</span>
+                    <div>
+                        <strong x-text="agents.find(agent => agent.id === selectedAgentId)?.name || 'No agent selected'"></strong>
+                        <small x-text="agentStatus === 'connected' ? 'Authenticated WebSocket' : 'Connect the agent socket to send'"></small>
+                    </div>
+                </div>
+
+                <label>
+                    <span>Subject <em>optional</em></span>
+                    <input class="field" x-model="subject" placeholder="Short context for this message">
+                </label>
+
+                <template x-if="!rawMode">
+                    <div class="form-stack">
+                        <label>
+                            <span>Text block</span>
+                            <textarea class="field message-input" x-model="messageText" placeholder="What should the system route?"></textarea>
+                        </label>
+                        <template x-for="block in contentBlocks" :key="block.id">
+                            <div class="content-block">
+                                <div class="content-block-heading">
+                                    <select class="field" x-model="block.type" aria-label="Content block type">
+                                        <option value="text">Text</option>
+                                        <option value="json">JSON</option>
+                                        <option value="file">File URL</option>
+                                    </select>
+                                    <button class="icon-button" type="button" @click="removeContentBlock(block.id)">Remove</button>
+                                </div>
+                                <input
+                                    class="field"
+                                    x-show="block.type === 'file'"
+                                    x-model="block.name"
+                                    placeholder="File name (optional)"
+                                    aria-label="File name"
+                                >
+                                <textarea
+                                    class="field code-input"
+                                    x-model="block.value"
+                                    :placeholder="block.type === 'file' ? 'https://example.test/file' : block.type === 'json' ? '{ &quot;key&quot;: &quot;value&quot; }' : 'Additional text'"
+                                    spellcheck="false"
+                                ></textarea>
+                            </div>
+                        </template>
+                        <div class="button-row content-actions">
+                            <button class="button ghost small" type="button" @click="addContentBlock('text')">+ Text</button>
+                            <button class="button ghost small" type="button" @click="addContentBlock('json')">+ JSON</button>
+                            <button class="button ghost small" type="button" @click="addContentBlock('file')">+ File URL</button>
+                        </div>
+                        <label>
+                            <span>Metadata JSON</span>
+                            <textarea class="field code-input" x-model="metadataText" spellcheck="false"></textarea>
+                        </label>
+                    </div>
+                </template>
+
+                <template x-if="rawMode">
+                    <label>
+                        <span>Raw wire payload</span>
+                        <textarea class="field raw-input" x-model="rawPayload" spellcheck="false"></textarea>
+                    </label>
+                </template>
+
+                <div class="composer-actions">
+                    <div class="button-row">
+                        <button class="button ghost" type="button" @click="toggleRawMode()" x-text="rawMode ? 'Structured mode' : 'Raw JSON'"></button>
+                        <button class="button ghost" type="button" x-show="rawMode" @click="formatPayload()">Format</button>
+                        <button class="button ghost" type="button" @click="copyPayload()">Copy payload</button>
+                    </div>
+                    <button class="button primary send" type="submit">
+                        Send message
+                        <kbd>⌘↵</kbd>
+                    </button>
+                </div>
+            </form>
+
+            <details class="payload-preview">
+                <summary>Exact outbound payload</summary>
+                <pre x-text="formatJson(previewPayload())"></pre>
+            </details>
+        </section>
+
+        <section class="view chat-view" x-show="tab === 'chat'">
+            <div class="chat-heading">
+                <div>
+                    <span class="eyebrow">Live chat</span>
+                    <h1 x-text="currentChatTrace() ? traceLabel(currentChatTrace()) : 'Waiting for the first event…'"></h1>
+                    <div class="chat-context">
+                        <code x-text="selectedTraceId || 'No trace selected'"></code>
+                        <code x-text="currentChatId() ? `chat ${currentChatId()}` : 'conversation pending'"></code>
+                        <template x-for="agentId in currentChatTrace()?.agentIds || []" :key="agentId">
+                            <span
+                                class="participant-chip"
+                                x-text="agents.find(agent => agent.id === agentId)?.name || compactId(agentId)"
+                            ></span>
+                        </template>
+                    </div>
+                </div>
+                <label class="chat-picker">
+                    <span>Conversation</span>
+                    <select class="field" x-model="selectedTraceId" @change="selectChatTrace(selectedTraceId)">
+                        <option value="">Select a message trace</option>
+                        <template x-for="trace in chatConversations()" :key="trace.id">
+                            <option :value="trace.id" x-text="`${traceLabel(trace)} · ${compactId(trace.id)}`"></option>
+                        </template>
+                    </select>
+                </label>
+            </div>
+
+            <div class="chat-stream">
+                <template x-if="pendingTraceId && chatMessages().length === 0">
+                    <div class="chat-pending">
+                        <span class="activity-pulse"></span>
+                        Waiting for the first persisted event…
+                    </div>
+                </template>
+                <template x-if="!pendingTraceId && !currentChatTrace()">
+                    <div class="empty">
+                        <strong>No live conversation selected</strong>
+                        <span>Send a message from Compose or select a message trace above.</span>
+                    </div>
+                </template>
+                <template x-for="message in chatMessages()" :key="message.event.id">
+                    <article class="chat-message" :class="message.actor?.role === 'agent' ? 'agent' : 'user'">
+                        <header>
+                            <strong x-text="message.actor?.name || 'Unknown sender'"></strong>
+                            <span x-text="message.actor?.role || 'actor'"></span>
+                            <time x-text="formatTime(message.event.created_at)"></time>
+                        </header>
+                        <div class="chat-content">
+                            <template x-for="(block, index) in message.content" :key="`${message.event.id}:${index}`">
+                                <div class="chat-block" :class="`content-${block.type}`">
+                                    <p x-show="block.type === 'text'" x-text="block.text"></p>
+                                    <pre x-show="block.type === 'json'" x-text="formatJson(block.json)"></pre>
+                                    <a
+                                        x-show="block.type === 'file' && block.uri"
+                                        :href="block.uri"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        x-text="block.name || block.uri"
+                                    ></a>
+                                    <code
+                                        x-show="block.type === 'file' && block.base64"
+                                        x-text="block.name || `${block.base64?.length ?? 0} base64 characters`"
+                                    ></code>
+                                </div>
+                            </template>
+                        </div>
+                        <button class="icon-button message-inspect" type="button" @click="inspectEvent(message.event)">
+                            Inspect event
+                        </button>
+                    </article>
+                </template>
+            </div>
+
+            <div class="chat-activity" x-show="chatActivity().length">
+                <span class="eyebrow">Event activity</span>
+                <template x-for="event in chatActivity()" :key="event.id">
+                    <button type="button" @click="inspectEvent(event)">
+                        <i></i>
+                        <strong x-text="event.key"></strong>
+                        <time x-text="formatTime(event.created_at)"></time>
+                    </button>
+                </template>
+            </div>
+
+            <form
+                class="chat-composer"
+                @submit.prevent="sendChatMessage()"
+                @keydown.meta.enter.prevent="sendChatMessage()"
+                @keydown.ctrl.enter.prevent="sendChatMessage()"
+            >
+                <div class="chat-composer-meta">
+                    <div class="segmented compact" role="group" aria-label="Live chat sender">
+                        <button type="button" :class="{ active: senderMode === 'user' }" @click="senderMode = 'user'">
+                            User
+                        </button>
+                        <button type="button" :class="{ active: senderMode === 'agent' }" @click="senderMode = 'agent'">
+                            Agent
+                        </button>
+                    </div>
+                    <span class="chat-sender">
+                        <strong
+                            x-text="senderMode === 'user'
+                                ? userName
+                                : agents.find(agent => agent.id === selectedAgentId)?.name || 'No agent selected'"
+                        ></strong>
+                        <small
+                            x-text="senderMode === 'agent'
+                                ? agentStatus === 'connected' ? 'authenticated socket' : 'connect agent to send'
+                                : userExternalId"
+                        ></small>
+                    </span>
+                    <span class="composer-shortcut">⌘/Ctrl + Enter</span>
+                </div>
+                <div class="chat-input-row">
+                    <textarea
+                        class="field"
+                        x-model="chatDraft"
+                        rows="2"
+                        aria-label="Live chat message"
+                        :disabled="!currentChatId()"
+                        :placeholder="!currentChatId()
+                            ? 'Waiting for conversation creation…'
+                            : senderMode === 'agent'
+                                ? 'Send a message as the connected agent…'
+                                : 'Send a message as this user…'"
+                    ></textarea>
+                    <button
+                        class="button primary"
+                        type="submit"
+                        :disabled="!currentChatId() || !chatDraft.trim() || (senderMode === 'agent' && agentStatus !== 'connected')"
+                    >
+                        Send
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <section class="view topology-view" x-show="tab === 'topology'">
+            <div class="view-heading compact-heading">
+                <div>
+                    <span class="eyebrow">Live topology</span>
+                    <h1>Agent clusters and routing paths.</h1>
+                </div>
+                <button class="button ghost small" type="button" @click="fitGraph()">Fit graph</button>
+            </div>
+            <div class="graph-legend">
+                <span><i class="legend-broker"></i> Broker cluster</span>
+                <span><i class="legend-agent online"></i> Online agent</span>
+                <span><i class="legend-agent"></i> Offline agent</span>
+                <span><i class="legend-edge"></i> Co-selected</span>
+                <span><i class="legend-route"></i> Routed now</span>
+            </div>
+            <div class="topology-canvas" x-ref="topology" aria-label="Agent topology graph"></div>
+        </section>
+
+        <section class="view traces-view" x-show="tab === 'traces'">
+            <div class="trace-browser">
+                <div class="trace-search">
+                    <input class="field" x-model="traceFilter" placeholder="Search trace or payload">
+                    <input class="field mono" x-model="keyFilter" placeholder="event.key">
+                    <select class="field trace-agent-filter" x-model="traceAgentFilter" aria-label="Filter traces by agent">
+                        <option value="">All agents</option>
+                        <template x-for="agent in agents" :key="agent.id">
+                            <option :value="agent.id" x-text="agent.name"></option>
+                        </template>
+                    </select>
+                    <input class="field mono" type="datetime-local" x-model="traceAfter" aria-label="Trace after">
+                    <input class="field mono" type="datetime-local" x-model="traceBefore" aria-label="Trace before">
+                </div>
+                <div class="trace-list">
+                    <template x-if="filteredTraces().length === 0">
+                        <div class="empty">
+                            <strong>No matching traces</strong>
+                            <span>Send a message or adjust the filters.</span>
+                        </div>
+                    </template>
+                    <template x-for="trace in filteredTraces()" :key="trace.id">
+                        <button
+                            type="button"
+                            class="trace-row"
+                            :class="{ active: selectedTraceId === trace.id }"
+                            @click="selectTrace(trace)"
+                        >
+                            <span class="trace-line"></span>
+                            <span class="trace-copy">
+                                <strong x-text="traceLabel(trace)"></strong>
+                                <small>
+                                    <code x-text="compactId(trace.id)"></code>
+                                    <span>·</span>
+                                    <span x-text="`${trace.events.length} events`"></span>
+                                </small>
+                            </span>
+                            <time x-text="formatTime(trace.updatedAt)"></time>
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            <div class="timeline">
+                <template x-if="!selectedTraceId">
+                    <div class="empty">
+                        <strong>Select a trace</strong>
+                        <span>Its event sequence will appear here.</span>
+                    </div>
+                </template>
+                <template x-for="(event, index) in currentTraceEvents()" :key="event.id">
+                    <button
+                        type="button"
+                        class="event-row"
+                        :class="{ active: selectedEvent?.id === event.id }"
+                        @click="inspectEvent(event)"
+                    >
+                        <span class="event-marker"></span>
+                        <span class="event-main">
+                            <strong x-text="event.key"></strong>
+                            <code x-text="compactId(event.id)"></code>
+                        </span>
+                        <span class="event-time">
+                            <time x-text="formatTime(event.created_at)"></time>
+                            <small x-text="eventDelta(event, index)"></small>
+                        </span>
+                    </button>
+                </template>
+            </div>
+        </section>
+    </section>
+
+    <aside class="inspector">
+        <div class="inspector-heading">
+            <div>
+                <span class="eyebrow">Inspector</span>
+                <strong x-text="selectedEvent ? selectedEvent.key : selectedEntity ? 'Entity metadata' : 'Nothing selected'"></strong>
+            </div>
+            <div class="button-row">
+                <button class="icon-button" type="button" @click="copyTraceId()" :disabled="!selectedTraceId" title="Copy trace ID">Trace ID</button>
+                <button class="icon-button" type="button" @click="copyInspector()" :disabled="!inspectorValue()" title="Copy JSON">Copy</button>
+            </div>
+        </div>
+        <div class="inspector-tools">
+            <input class="field" x-model="inspectorSearch" placeholder="Find in JSON">
+            <div class="segmented compact" role="group" aria-label="JSON view">
+                <button type="button" :class="{ active: inspectorMode === 'raw' }" @click="inspectorMode = 'raw'">Raw</button>
+                <button type="button" :class="{ active: inspectorMode === 'tree' }" @click="inspectorMode = 'tree'">Tree</button>
+            </div>
+        </div>
+        <template x-if="inspectorValue() && inspectorMode === 'raw'">
+            <pre class="json-view" x-text="inspectorJson()"></pre>
+        </template>
+        <template x-if="inspectorValue() && inspectorMode === 'tree'">
+            <div class="json-tree">
+                <template x-for="row in inspectorTree()" :key="row.path">
+                    <div
+                        class="json-tree-row"
+                        :class="{ expandable: row.expandable }"
+                        :style="`padding-left: ${8 + row.depth * 12}px`"
+                        :title="row.path"
+                    >
+                        <button
+                            class="json-disclosure"
+                            type="button"
+                            :class="{ open: row.expanded }"
+                            :disabled="!row.expandable"
+                            @click="row.expandable && toggleJsonPath(row.path)"
+                            :aria-label="row.expanded ? 'Collapse value' : 'Expand value'"
+                        >›</button>
+                        <code class="json-key" x-text="row.key"></code>
+                        <span class="json-colon">:</span>
+                        <span class="json-value" :class="`json-${row.valueType}`" x-text="row.value"></span>
+                    </div>
+                </template>
+            </div>
+        </template>
+        <template x-if="!inspectorValue()">
+            <div class="empty inspector-empty">
+                <strong>Inspect the event stream</strong>
+                <span>Select an agent, graph node, edge, or trace event.</span>
+            </div>
+        </template>
+    </aside>
+
+    <div class="toast error" x-show="error" x-transition>
+        <span x-text="error"></span>
+        <button type="button" @click="error = ''">×</button>
+    </div>
+    <div class="toast notice" x-show="notice" x-transition x-effect="if (notice) setTimeout(() => notice = '', 2600)">
+        <span x-text="notice"></span>
+    </div>
+</main>
+{% endblock %}

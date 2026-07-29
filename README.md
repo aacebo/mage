@@ -1,15 +1,15 @@
-# Agent Gateway
+# Mage
 
-A semantic gateway, router, and message broker for AI agents.
+A reference runtime for ATP (Agent Transport Protocol), providing a semantic gateway, router, and message broker for AI agents.
 
-Agent Gateway accepts requests from clients, identifies the most appropriate registered agent based on message content and agent capabilities, forwards the request, and streams progress and results back to the client using Server-Sent Events.
+Mage accepts requests from clients through the ATP-facing Mage Broker, identifies the most appropriate registered agent based on message content and agent capabilities, forwards the request, and streams progress and results back to the client using Server-Sent Events.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     Client["Client"]
-    Gateway["Agent Gateway"]
+    Gateway["Mage Broker"]
     Router{"Semantic Router"}
     Registry[("Agent Registry")]
     Agent["Selected Agent"]
@@ -59,9 +59,9 @@ flowchart LR
 
 ## Core Components
 
-### Agent Gateway
+### Mage Broker
 
-The Agent Gateway is the public entry point for clients and agents.
+The Mage Broker is the public ATP entry point for clients and agents.
 
 It is responsible for:
 
@@ -388,20 +388,20 @@ This allows the gateway to enforce:
 ### AMQP Topic Topology
 
 Events are published to the durable `events` topic exchange with concrete two-part routing keys such as
-`actor.create`. The worker consumes the shared durable `neuron.worker.events` queue, which is bound to
+`actor.create`. Mage Worker consumes the shared durable `mage.worker.events` queue, which is bound to
 `actor.*` and `message.inbound`. Multiple worker replicas consume the same queue and therefore load-balance
 deliveries.
 
 Existing development brokers may still contain the old direct exchange and one queue per routing key. A direct
 exchange cannot be redeclared as a topic exchange, so reset only that AMQP topology during coordinated downtime:
 
-1. Stop publishers and consumers with `docker compose stop broker worker`.
+1. Stop publishers and consumers with `docker compose stop mage-broker mage-worker`.
 2. Inspect the RabbitMQ management UI at `http://localhost:15672` and drain or explicitly discard messages in
    `actor.create`, `actor.update`, `message.create`, and `message.inbound`.
 3. Delete those four queues and the `events` exchange in the management UI.
-4. Start the consumer first with `docker compose up -d worker` and verify that `events` is a topic exchange with
-   the `neuron.worker.events` queue and both expected bindings.
-5. Resume publishing with `docker compose up -d broker`.
+4. Start the consumer first with `docker compose up -d mage-worker` and verify that `events` is a topic exchange with
+   the `mage.worker.events` queue and both expected bindings.
+5. Resume publishing with `docker compose up -d mage-broker`.
 
 Do not use `docker compose down -v` for this migration because it can remove unrelated persisted data.
 
@@ -428,8 +428,8 @@ The secret is never included in persisted actor events. The console stores a use
 browser `sessionStorage`; query credentials may remain visible in browser networking tools but are never
 included in broker tracing output.
 
-The broker uses the same compact tracing setup as the worker. Set `RUST_LOG` to override its default
-`broker=debug` filter, for example `RUST_LOG=broker=info,storage=warn`.
+Mage Broker uses the same compact tracing setup as Mage Worker. Set `RUST_LOG` to override its default
+`mage_broker=debug` filter, for example `RUST_LOG=mage_broker=info,mage_storage=warn`.
 
 Compose starts a new conversation. Messages sent from Live Chat include the established `chat_id`; the broker
 accepts them only from existing chat members in the configured tenant, and the worker appends them without

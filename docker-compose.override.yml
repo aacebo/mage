@@ -1,5 +1,5 @@
 services:
-  broker:
+  mage-broker:
     build:
       target: builder
     working_dir: /app
@@ -8,25 +8,25 @@ services:
       CONSOLE_TENANT_ID: 775a179d-9819-42c0-ab47-637bf96fbf7b
     volumes:
       - .:/app
-      - broker-target:/app/target
-      - broker-cargo-registry:/usr/local/cargo/registry
-    command: cargo run --release --package broker
+      - mage-broker-target:/app/target
+      - mage-broker-cargo-registry:/usr/local/cargo/registry
+    command: cargo run --release --package mage-broker
 
-  worker:
+  mage-worker:
     build:
       target: builder
     working_dir: /app
     environment:
-      NEURON_CACHE: /app/.cache
+      MAGE_CACHE: /app/.cache
     volumes:
       - .:/app
-      - worker-target:/app/target
-      - worker-cargo-registry:/usr/local/cargo/registry
+      - mage-worker-target:/app/target
+      - mage-worker-cargo-registry:/usr/local/cargo/registry
       - ./.cache:/app/.cache
-    command: cargo run --release --package worker
+    command: cargo run --release --package mage-worker
 
 volumes:
-  broker-target:
-  worker-target:
-  broker-cargo-registry:
-  worker-cargo-registry:
+  mage-broker-target:
+  mage-worker-target:
+  mage-broker-cargo-registry:
+  mage-worker-cargo-registry:
