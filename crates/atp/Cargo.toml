@@ -23,9 +23,6 @@ uuid.workspace = true
 chrono.workspace = true
 futures-util = { workspace = true, features = ["sink"] }
 
-mage-error.workspace = true
-mage-types.workspace = true
-
 [dev-dependencies]
 axum = { workspace = true, features = ["http1", "tokio", "ws"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }

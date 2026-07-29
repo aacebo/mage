@@ -369,8 +369,6 @@ dependencies = [
  "axum",
  "chrono",
  "futures-util",
- "mage-error",
- "mage-types",
  "serde",
  "serde_json",
  "serde_valid",
