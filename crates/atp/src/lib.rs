@@ -50,7 +50,6 @@ impl Producer for Socket {
             ))
             .await
             .map_err(mage_error::http)
-            .into()
     }
 }
 
