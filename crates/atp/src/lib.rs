@@ -3,13 +3,17 @@ pub use error::Error;
 #[doc(inline)]
 pub use frame::Frame;
 use futures_util::SinkExt;
+#[doc(inline)]
+pub use message::Message;
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 // pub mod client;
+mod connect;
 mod error;
-mod frame;
+pub mod frame;
+mod message;
 pub mod stream;
 // pub mod server;
 

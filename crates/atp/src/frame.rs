@@ -1,3 +1,7 @@
+use serde_valid::Validate;
+
+use crate::{connect, message, stream};
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Frame<T = serde_json::Value> {
@@ -78,5 +82,65 @@ impl Error {
             code: Self::INTERNAL,
             message: message.to_string(),
         }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
+#[serde(tag = "type")]
+pub enum AtpPacket {
+    #[serde(rename = "ack")]
+    Ack,
+
+    #[serde(rename = "connect")]
+    #[validate]
+    Connect(connect::Connect),
+
+    #[serde(rename = "message")]
+    #[validate]
+    Message(message::Message),
+
+    #[serde(untagged)]
+    #[validate]
+    Stream(stream::StreamEvent),
+}
+
+impl AtpPacket {
+    pub fn as_connect(&self) -> Option<&connect::Connect> {
+        match self {
+            Self::Connect(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    pub fn as_message(&self) -> Option<&message::Message> {
+        match self {
+            Self::Message(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    pub fn as_stream_event(&self) -> Option<&stream::StreamEvent> {
+        match self {
+            Self::Stream(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
+impl From<connect::Connect> for AtpPacket {
+    fn from(value: connect::Connect) -> Self {
+        Self::Connect(value)
+    }
+}
+
+impl From<message::Message> for AtpPacket {
+    fn from(value: message::Message) -> Self {
+        Self::Message(value)
+    }
+}
+
+impl From<stream::StreamEvent> for AtpPacket {
+    fn from(value: stream::StreamEvent) -> Self {
+        Self::Stream(value)
     }
 }

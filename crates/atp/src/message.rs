@@ -1,0 +1,88 @@
+use std::collections::BTreeMap;
+
+use serde_valid::Validate;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
+pub struct Message {
+    pub chat_id: uuid::Uuid,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reply_to: Option<uuid::Uuid>,
+
+    #[validate(min_items = 1)]
+    pub content: Vec<Content>,
+
+    #[serde(default)]
+    pub metadata: BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Content {
+    Text {
+        text: String,
+    },
+    File {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+
+        #[serde(flatten)]
+        file: FileContent,
+    },
+    Json {
+        json: serde_json::Value,
+    },
+}
+
+impl Content {
+    pub fn as_text(&self) -> Option<&str> {
+        match self {
+            Self::Text { text } => Some(text),
+            _ => None,
+        }
+    }
+
+    pub fn as_file(&self) -> Option<(Option<&str>, &FileContent)> {
+        match self {
+            Self::File { name, file } => Some((name.as_deref(), file)),
+            _ => None,
+        }
+    }
+
+    pub fn as_json(&self) -> Option<&serde_json::Value> {
+        match self {
+            Self::Json { json } => Some(json),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for Content {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Text { text } => write!(f, "{text}"),
+            Self::Json { json } => write!(f, "{json}"),
+            Self::File { name, file } => match name {
+                None => write!(f, "{file}"),
+                Some(name) => write!(f, "{name}: {file}"),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FileContent {
+    Uri { uri: String },
+    Base64 { base64: String },
+}
+
+impl std::fmt::Display for FileContent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Uri { uri } => write!(f, "{uri}"),
+            Self::Base64 { base64 } => write!(f, "{base64}"),
+        }
+    }
+}
