@@ -1,39 +1,17 @@
-#[doc(inline)]
-pub use error::Error;
-#[doc(inline)]
-pub use frame::Frame;
-use futures_util::SinkExt;
-#[doc(inline)]
-pub use message::Message;
+use futures_util::{SinkExt, TryStreamExt};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
-// pub mod client;
-mod connect;
+pub mod client;
 mod error;
-pub mod frame;
-mod message;
-pub mod stream;
-// pub mod server;
+pub mod server;
+pub mod types;
+pub mod wire;
+
+pub use error::Error;
 
 pub type SocketStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
-
-pub trait Producer {
-    type Error;
-
-    fn send<T>(&mut self, frame: Frame<T>) -> impl Future<Output = Result<(), Self::Error>>
-    where
-        T: serde::Serialize;
-}
-
-pub trait Consumer {
-    type Error;
-
-    fn recv<T>(&mut self) -> impl Future<Output = Result<Frame, Self::Error>>
-    where
-        T: for<'a> serde::Deserialize<'a>;
-}
 
 pub struct Socket {
     socket: SocketStream,
@@ -47,26 +25,34 @@ impl Socket {
         let (socket, _) = tokio_tungstenite::connect_async(request).await?;
         Ok(Self { socket })
     }
-}
 
-impl From<SocketStream> for Socket {
-    fn from(socket: SocketStream) -> Self {
-        Self { socket }
-    }
-}
-
-impl Producer for Socket {
-    type Error = Error;
-
-    async fn send<T>(&mut self, frame: Frame<T>) -> Result<(), Self::Error>
+    pub async fn write<T>(&mut self, frame: impl Into<wire::Frame<T>>) -> Result<(), Error>
     where
         T: serde::Serialize,
     {
+        let frame = frame.into();
         Ok(self
             .socket
             .send(tokio_tungstenite::tungstenite::Message::Binary(
                 serde_json::to_vec(&frame)?.into(),
             ))
             .await?)
+    }
+
+    pub async fn read<T>(&mut self) -> Result<Option<wire::Frame<T>>, Error>
+    where
+        T: for<'a> serde::Deserialize<'a>,
+    {
+        if let Some(tokio_tungstenite::tungstenite::Message::Binary(bytes)) = self.socket.try_next().await? {
+            Ok(serde_json::from_slice(&bytes)?)
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+impl From<SocketStream> for Socket {
+    fn from(socket: SocketStream) -> Self {
+        Self { socket }
     }
 }

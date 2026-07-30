@@ -1,22 +1,3 @@
-use std::collections::BTreeMap;
-
-use serde_valid::Validate;
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
-pub struct Message {
-    pub chat_id: uuid::Uuid,
-
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reply_to: Option<uuid::Uuid>,
-
-    #[validate(min_items = 1)]
-    pub content: Vec<Content>,
-
-    #[serde(default)]
-    pub metadata: BTreeMap<String, serde_json::Value>,
-}
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Content {

@@ -1,16 +1,18 @@
 use serde_valid::Validate;
 
+use crate::types;
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
-pub struct Connect {
+pub struct ConnectRequest {
     pub name: String,
     pub description: String,
 
     #[serde(default)]
     #[validate]
-    pub skills: Vec<Skill>,
+    pub skills: Vec<types::Skill>,
 }
 
-impl Default for Connect {
+impl Default for ConnectRequest {
     fn default() -> Self {
         Self {
             name: env!("CARGO_PKG_NAME").to_string(),
@@ -18,15 +20,4 @@ impl Default for Connect {
             skills: vec![],
         }
     }
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
-pub struct Skill {
-    #[validate(pattern = r"^([a-z0-9_]+)$")]
-    pub name: String,
-
-    pub display_name: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
 }

@@ -1,17 +1,17 @@
 use serde_valid::Validate;
 
 mod close;
-mod error;
 mod open;
+mod status;
 mod text;
 
 pub use close::*;
-pub use error::*;
 pub use open::*;
+pub use status::*;
 pub use text::*;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
-#[serde(tag = "type")]
+#[serde(tag = "name", content = "body")]
 pub enum StreamEvent {
     #[serde(rename = "stream.open")]
     Open(StreamOpenEvent),
@@ -19,18 +19,14 @@ pub enum StreamEvent {
     #[serde(rename = "stream.close")]
     Close(StreamCloseEvent),
 
-    #[serde(rename = "stream.error")]
-    Error(StreamErrorEvent),
+    #[serde(rename = "stream.status")]
+    Status(StreamStatusEvent),
 
     #[serde(rename = "stream.text")]
     Text(StreamTextEvent),
 }
 
 impl StreamEvent {
-    pub fn into_signal(self) -> super::Signal {
-        self.into()
-    }
-
     pub fn as_open(&self) -> Option<&StreamOpenEvent> {
         match self {
             Self::Open(v) => Some(v),
@@ -45,9 +41,9 @@ impl StreamEvent {
         }
     }
 
-    pub fn as_error(&self) -> Option<&StreamErrorEvent> {
+    pub fn as_status(&self) -> Option<&StreamStatusEvent> {
         match self {
-            Self::Error(v) => Some(v),
+            Self::Status(v) => Some(v),
             _ => None,
         }
     }
@@ -63,23 +59,15 @@ impl StreamEvent {
         match self {
             Self::Open(v) => &v.stream_id,
             Self::Close(v) => &v.stream_id,
-            Self::Error(v) => &v.stream_id,
+            Self::Status(v) => &v.stream_id,
             Self::Text(v) => &v.stream_id,
         }
     }
 
-    pub fn index(&self) -> Option<usize> {
+    pub fn sequence(&self) -> Option<usize> {
         match self {
-            Self::Error(v) => Some(v.index),
-            Self::Text(v) => Some(v.index),
-            _ => None,
-        }
-    }
-
-    pub fn item(&self) -> Option<usize> {
-        match self {
-            Self::Error(v) => v.item,
-            Self::Text(v) => v.item,
+            Self::Status(v) => Some(v.sequence),
+            Self::Text(v) => Some(v.sequence),
             _ => None,
         }
     }
@@ -97,9 +85,9 @@ impl From<StreamCloseEvent> for StreamEvent {
     }
 }
 
-impl From<StreamErrorEvent> for StreamEvent {
-    fn from(value: StreamErrorEvent) -> Self {
-        Self::Error(value)
+impl From<StreamStatusEvent> for StreamEvent {
+    fn from(value: StreamStatusEvent) -> Self {
+        Self::Status(value)
     }
 }
 
