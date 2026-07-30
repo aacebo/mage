@@ -1,9 +1,5 @@
 use serde_valid::Validate;
 
-pub fn new() -> Connect {
-    Connect::default()
-}
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
 pub struct Connect {
     pub name: String,
