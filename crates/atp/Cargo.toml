@@ -1,6 +1,6 @@
 [package]
 name = "atp"
-description = "Agent Transport Protocol client, server, and message types"
+description = "Actor Transport Protocol client, server, and message types"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

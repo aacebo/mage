@@ -1,6 +1,6 @@
 # Mage
 
-A reference runtime for ATP (Agent Transport Protocol), providing a semantic gateway, router, and message broker for AI agents.
+A reference runtime for ATP (Actor Transport Protocol), providing a semantic gateway, router, and message broker for AI agents.
 
 Mage accepts requests from clients through the ATP-facing Mage Broker, identifies the most appropriate registered agent based on message content and agent capabilities, forwards the request, and streams progress and results back to the client using Server-Sent Events.
 

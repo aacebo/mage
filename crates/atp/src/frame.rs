@@ -27,7 +27,8 @@ pub struct Event<T = serde_json::Value> {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sequence: Option<u64>,
-    pub name: String,
+
+    #[serde(flatten)]
     pub body: T,
 }
 
