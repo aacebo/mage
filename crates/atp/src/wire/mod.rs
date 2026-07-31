@@ -31,3 +31,68 @@ impl<T> From<Notification<T>> for Frame<T> {
         Self::Notification(value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{Error, client, wire};
+
+    mod serde {
+        use super::*;
+
+        #[test]
+        fn request() -> Result<(), Error> {
+            let frame: wire::Frame<client::ClientRequest> = serde_json::from_str(
+                r#"{
+                "method": "connect",
+                "params": {
+                    "name": "test",
+                    "description": "a test agent...",
+                    "secret": "abcdefg",
+                    "skills": [
+                        {
+                            "name": "echo",
+                            "display_name": "Echo",
+                            "description": "I can echo back what you said to me"
+                        }
+                    ]
+                }
+            }"#,
+            )?;
+
+            let json = serde_json::to_string(&frame)?;
+
+            debug_assert_eq!(
+                &json,
+                r#"{"method":"connect","params":{"name":"test","description":"a test agent...","secret":"abcdefg","skills":[{"name":"echo","display_name":"Echo","description":"I can echo back what you said to me"}]}}"#,
+                "{json}"
+            );
+
+            Ok(())
+        }
+
+        #[test]
+        fn notification() -> Result<(), Error> {
+            let frame: wire::Frame<client::ClientEvent> = serde_json::from_str(
+                r#"{
+                "name": "stream.status",
+                "body": {
+                    "stream_id": "1",
+                    "sequence": 3,
+                    "code": "thinking",
+                    "message": "thinking..."
+                }
+            }"#,
+            )?;
+
+            let json = serde_json::to_string(&frame)?;
+
+            debug_assert_eq!(
+                &json,
+                r#"{"name":"stream.status","body":{"stream_id":"1","sequence":3,"code":"thinking","message":"thinking..."}}"#,
+                "{json}"
+            );
+
+            Ok(())
+        }
+    }
+}

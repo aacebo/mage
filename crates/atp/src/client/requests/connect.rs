@@ -6,6 +6,7 @@ use crate::types;
 pub struct ConnectRequest {
     pub name: String,
     pub description: String,
+    pub secret: String,
 
     #[serde(default)]
     #[validate]
@@ -17,6 +18,7 @@ impl Default for ConnectRequest {
         Self {
             name: env!("CARGO_PKG_NAME").to_string(),
             description: env!("CARGO_PKG_DESCRIPTION").to_string(),
+            secret: std::env::var("AGENT_SECRET").unwrap_or_default(),
             skills: vec![],
         }
     }
