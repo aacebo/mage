@@ -1,7 +1,6 @@
 use futures_util::{SinkExt, TryStreamExt};
 use tokio::net::TcpStream;
-use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite};
 
 pub mod client;
 mod error;
@@ -20,7 +19,7 @@ pub struct Socket {
 impl Socket {
     pub async fn connect<R>(request: R) -> Result<Self, Error>
     where
-        R: IntoClientRequest + Unpin,
+        R: tungstenite::client::IntoClientRequest + Unpin,
     {
         let (socket, _) = tokio_tungstenite::connect_async(request).await?;
         Ok(Self { socket })
@@ -34,9 +33,7 @@ impl Socket {
 
         Ok(self
             .socket
-            .send(tokio_tungstenite::tungstenite::Message::Binary(
-                serde_json::to_vec(&frame)?.into(),
-            ))
+            .send(tungstenite::Message::Binary(serde_json::to_vec(&frame)?.into()))
             .await?)
     }
 
@@ -44,12 +41,11 @@ impl Socket {
     where
         T: for<'a> serde::Deserialize<'a>,
     {
-        if let Some(tokio_tungstenite::tungstenite::Message::Binary(bytes)) = self.socket.try_next().await? {
-            Ok(serde_json::from_slice(&bytes)?)
-        } else if let Some(tokio_tungstenite::tungstenite::Message::Text(text)) = self.socket.try_next().await? {
-            Ok(serde_json::from_str(&text)?)
-        } else {
-            Ok(None)
+        match self.socket.try_next().await? {
+            Some(tungstenite::Message::Binary(bytes)) => Ok(serde_json::from_slice(&bytes)?),
+            Some(tungstenite::Message::Text(text)) => Ok(serde_json::from_str(&text)?),
+            Some(tungstenite::Message::Ping(_)) | Some(tungstenite::Message::Pong(_)) => todo!(),
+            _ => Ok(None),
         }
     }
 }
