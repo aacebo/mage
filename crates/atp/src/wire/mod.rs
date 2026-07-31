@@ -34,14 +34,14 @@ impl<T> From<Notification<T>> for Frame<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Error, client, wire};
+    use crate::{Error, wire};
 
     mod serde {
         use super::*;
 
         #[test]
         fn request() -> Result<(), Error> {
-            let frame: wire::Frame<client::ClientRequest> = serde_json::from_str(
+            let frame: wire::Frame = serde_json::from_str(
                 r#"{
                 "method": "connect",
                 "params": {
@@ -63,7 +63,7 @@ mod tests {
 
             debug_assert_eq!(
                 &json,
-                r#"{"method":"connect","params":{"name":"test","description":"a test agent...","secret":"abcdefg","skills":[{"name":"echo","display_name":"Echo","description":"I can echo back what you said to me"}]}}"#,
+                r#"{"method":"connect","params":{"description":"a test agent...","name":"test","secret":"abcdefg","skills":[{"description":"I can echo back what you said to me","display_name":"Echo","name":"echo"}]}}"#,
                 "{json}"
             );
 
@@ -72,7 +72,7 @@ mod tests {
 
         #[test]
         fn notification() -> Result<(), Error> {
-            let frame: wire::Frame<client::ClientEvent> = serde_json::from_str(
+            let frame: wire::Frame = serde_json::from_str(
                 r#"{
                 "name": "stream.status",
                 "body": {
@@ -88,7 +88,7 @@ mod tests {
 
             debug_assert_eq!(
                 &json,
-                r#"{"name":"stream.status","body":{"stream_id":"1","sequence":3,"code":"thinking","message":"thinking..."}}"#,
+                r#"{"body":{"code":"thinking","message":"thinking...","sequence":3,"stream_id":"1"},"name":"stream.status"}"#,
                 "{json}"
             );
 
