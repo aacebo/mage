@@ -43,6 +43,38 @@ mod tests {
         fn request() -> Result<(), Error> {
             let frame: wire::Frame = serde_json::from_str(
                 r#"{
+                "id": "019fb92c-e616-716f-9768-16c4753fe9d8",
+                "method": "connect",
+                "params": {
+                    "name": "test",
+                    "description": "a test agent...",
+                    "secret": "abcdefg",
+                    "skills": [
+                        {
+                            "name": "echo",
+                            "display_name": "Echo",
+                            "description": "I can echo back what you said to me"
+                        }
+                    ]
+                }
+            }"#,
+            )?;
+
+            let json = serde_json::to_string(&frame)?;
+
+            debug_assert_eq!(
+                json,
+                r#"{"id":"019fb92c-e616-716f-9768-16c4753fe9d8","method":"connect","params":{"description":"a test agent...","name":"test","secret":"abcdefg","skills":[{"description":"I can echo back what you said to me","display_name":"Echo","name":"echo"}]}}"#,
+                "{json}"
+            );
+
+            Ok(())
+        }
+
+        #[test]
+        fn response() -> Result<(), Error> {
+            let frame: wire::Frame = serde_json::from_str(
+                r#"{
                 "method": "connect",
                 "params": {
                     "name": "test",
