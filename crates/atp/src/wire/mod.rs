@@ -62,7 +62,7 @@ mod tests {
             let json = serde_json::to_string(&frame)?;
 
             debug_assert_eq!(
-                &json,
+                json,
                 r#"{"method":"connect","params":{"description":"a test agent...","name":"test","secret":"abcdefg","skills":[{"description":"I can echo back what you said to me","display_name":"Echo","name":"echo"}]}}"#,
                 "{json}"
             );
@@ -87,7 +87,7 @@ mod tests {
             let json = serde_json::to_string(&frame)?;
 
             debug_assert_eq!(
-                &json,
+                json,
                 r#"{"body":{"code":"thinking","message":"thinking...","sequence":3,"stream_id":"1"},"name":"stream.status"}"#,
                 "{json}"
             );
