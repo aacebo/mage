@@ -64,11 +64,12 @@ impl StreamEvent {
         }
     }
 
-    pub fn sequence(&self) -> Option<usize> {
+    pub fn sequence(&self) -> usize {
         match self {
-            Self::Status(v) => Some(v.sequence),
-            Self::Text(v) => Some(v.sequence),
-            _ => None,
+            Self::Open(v) => v.sequence,
+            Self::Status(v) => v.sequence,
+            Self::Text(v) => v.sequence,
+            Self::Close(v) => v.sequence,
         }
     }
 }

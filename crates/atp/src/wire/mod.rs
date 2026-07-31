@@ -9,9 +9,9 @@ pub use response::*;
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum Frame<T = serde_json::Value> {
-    Request(Request<T>),
     Response(Response<T>),
     Notification(Notification<T>),
+    Request(Request<T>),
 }
 
 impl<T> From<Request<T>> for Frame<T> {

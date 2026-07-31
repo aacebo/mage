@@ -53,7 +53,7 @@ impl std::fmt::Display for Content {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(untagged)]
 pub enum FileContent {
     Uri { uri: String },
     Base64 { base64: String },

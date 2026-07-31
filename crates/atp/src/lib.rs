@@ -31,6 +31,7 @@ impl Socket {
         T: serde::Serialize,
     {
         let frame = frame.into();
+
         Ok(self
             .socket
             .send(tokio_tungstenite::tungstenite::Message::Binary(
@@ -45,6 +46,8 @@ impl Socket {
     {
         if let Some(tokio_tungstenite::tungstenite::Message::Binary(bytes)) = self.socket.try_next().await? {
             Ok(serde_json::from_slice(&bytes)?)
+        } else if let Some(tokio_tungstenite::tungstenite::Message::Text(text)) = self.socket.try_next().await? {
+            Ok(serde_json::from_str(&text)?)
         } else {
             Ok(None)
         }
