@@ -37,15 +37,15 @@ impl Socket {
             .await?)
     }
 
-    pub async fn read<T>(&mut self) -> Result<Option<wire::Frame<T>>, Error>
+    pub async fn read<T>(&mut self) -> Result<Output<T>, Error>
     where
         T: for<'a> serde::Deserialize<'a>,
     {
         match self.socket.try_next().await? {
-            Some(tungstenite::Message::Binary(bytes)) => Ok(serde_json::from_slice(&bytes)?),
-            Some(tungstenite::Message::Text(text)) => Ok(serde_json::from_str(&text)?),
-            Some(tungstenite::Message::Ping(_)) | Some(tungstenite::Message::Pong(_)) => todo!(),
-            _ => Ok(None),
+            Some(tungstenite::Message::Binary(bytes)) => Ok(Output::Frame(serde_json::from_slice(&bytes)?)),
+            Some(tungstenite::Message::Text(text)) => Ok(Output::Frame(serde_json::from_str(&text)?)),
+            Some(tungstenite::Message::Ping(_)) | Some(tungstenite::Message::Pong(_)) => Ok(Output::Continue),
+            _ => Ok(Output::Close),
         }
     }
 }
@@ -54,4 +54,11 @@ impl From<SocketStream> for Socket {
     fn from(socket: SocketStream) -> Self {
         Self { socket }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum Output<T = serde_json::Value> {
+    Frame(wire::Frame<T>),
+    Continue,
+    Close,
 }

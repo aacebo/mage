@@ -12,7 +12,6 @@ pub enum Frame<T = serde_json::Value> {
     Notification(Notification<T>),
     Response(Response<T>),
     Request(Request<T>),
-    Other,
 }
 
 impl<T> From<Request<T>> for Frame<T> {
