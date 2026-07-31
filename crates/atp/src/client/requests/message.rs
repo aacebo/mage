@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde_valid::Validate;
 
-use crate::types::Content;
+use crate::types;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
 pub struct MessageRequest {
@@ -12,7 +12,7 @@ pub struct MessageRequest {
     pub reply_to_id: Option<uuid::Uuid>,
 
     #[validate(min_items = 1)]
-    pub content: Vec<Content>,
+    pub content: Vec<types::Content>,
 
     #[serde(default)]
     pub metadata: BTreeMap<String, serde_json::Value>,
