@@ -5,7 +5,7 @@ use serde_valid::Validate;
 use crate::types;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
-pub struct MessageRequest {
+pub struct MessageParams {
     pub chat_id: uuid::Uuid,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]

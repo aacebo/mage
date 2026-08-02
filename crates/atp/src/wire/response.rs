@@ -5,6 +5,30 @@ pub enum Response<T = serde_json::Value> {
     Err { id: uuid::Uuid, error: Error },
 }
 
+impl<T> Response<T> {
+    pub fn payload(&self) -> Result<&T, &Error> {
+        match self {
+            Self::Ok { id: _, result } => Ok(result),
+            Self::Err { id: _, error } => Err(error),
+        }
+    }
+}
+
+impl Response {
+    pub fn try_cast_into<T>(self) -> Result<Response<T>, crate::Error>
+    where
+        T: for<'a> serde::Deserialize<'a>,
+    {
+        match self {
+            Self::Err { id, error } => Ok(Response::Err { id, error }),
+            Self::Ok { id, result } => Ok(Response::Ok {
+                id,
+                result: serde_json::from_value(result)?,
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Error {
     pub code: i64,

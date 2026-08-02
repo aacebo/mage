@@ -1,5 +1,5 @@
 pub mod events;
-pub mod requests;
+pub mod params;
 
 pub use events::ClientEvent;
-pub use requests::ClientRequest;
+pub use params::ClientParams;

@@ -11,18 +11,11 @@ pub use status::*;
 pub use text::*;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
-#[serde(tag = "name", content = "body")]
+#[serde(untagged)]
 pub enum StreamEvent {
-    #[serde(rename = "stream.open")]
     Open(StreamOpenEvent),
-
-    #[serde(rename = "stream.close")]
     Close(StreamCloseEvent),
-
-    #[serde(rename = "stream.status")]
     Status(StreamStatusEvent),
-
-    #[serde(rename = "stream.text")]
     Text(StreamTextEvent),
 }
 

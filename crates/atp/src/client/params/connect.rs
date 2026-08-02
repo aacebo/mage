@@ -3,7 +3,7 @@ use serde_valid::Validate;
 use crate::types;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
-pub struct ConnectRequest {
+pub struct ConnectParams {
     pub name: String,
     pub description: String,
     pub secret: String,
@@ -13,7 +13,7 @@ pub struct ConnectRequest {
     pub skills: Vec<types::Skill>,
 }
 
-impl Default for ConnectRequest {
+impl Default for ConnectParams {
     fn default() -> Self {
         Self {
             name: env!("CARGO_PKG_NAME").to_string(),

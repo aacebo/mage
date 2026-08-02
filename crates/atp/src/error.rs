@@ -1,3 +1,9 @@
+use crate::wire;
+
+pub fn protocol(message: impl std::fmt::Display) -> Error {
+    Error::Protocol(message.to_string())
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "code", content = "message")]
 pub enum Error {
@@ -33,6 +39,18 @@ impl From<serde_json::Error> for Error {
 impl From<tokio_tungstenite::tungstenite::Error> for Error {
     fn from(value: tokio_tungstenite::tungstenite::Error) -> Self {
         Self::Socket(value.to_string())
+    }
+}
+
+impl From<wire::Error> for Error {
+    fn from(value: wire::Error) -> Self {
+        Error::Protocol(format!("{} => {}", value.code, value.message))
+    }
+}
+
+impl From<&wire::Error> for Error {
+    fn from(value: &wire::Error) -> Self {
+        Error::Protocol(format!("{} => {}", value.code, value.message))
     }
 }
 

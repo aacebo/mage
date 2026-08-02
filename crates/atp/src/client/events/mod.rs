@@ -3,18 +3,18 @@ mod stream;
 pub use stream::*;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "name", content = "body", rename_all = "snake_case")]
+#[serde(untagged)]
 pub enum ClientEvent {
     #[serde(untagged)]
     Stream(StreamEvent),
 }
 
 impl ClientEvent {
-    pub fn as_stream(&self) -> Option<&StreamEvent> {
+    pub fn try_stream(&self) -> Result<&StreamEvent, crate::Error> {
         match self {
-            Self::Stream(v) => Some(v),
+            Self::Stream(v) => Ok(v),
             #[allow(unused)]
-            _ => None,
+            _ => Err(crate::error::protocol("expected stream event")),
         }
     }
 }
