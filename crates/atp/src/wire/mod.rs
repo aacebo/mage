@@ -178,13 +178,17 @@ mod tests {
         #[test]
         fn result() -> Result<(), Error> {
             let frame: wire::Frame = serde_json::from_value(serde_json::json!({
-                "id": "019fb92c-e616-716f-9768-16c4753fe9d8"
+                "id": "019fb92c-e616-716f-9768-16c4753fe9d8",
+                "result": 200
             }))?;
 
             let res = frame.try_response()?.result().unwrap();
-            debug_assert!(res.is_none(), "{frame:#?}");
+            debug_assert_eq!(res.cloned(), Some(serde_json::to_value(200)?), "{frame:#?}");
             let json = serde_json::to_string(&frame)?;
-            debug_assert_eq!(json, r#"{"id":"019fb92c-e616-716f-9768-16c4753fe9d8"}"#, "{json}");
+            debug_assert_eq!(
+                json, r#"{"id":"019fb92c-e616-716f-9768-16c4753fe9d8","result":200}"#,
+                "{json}"
+            );
 
             Ok(())
         }
