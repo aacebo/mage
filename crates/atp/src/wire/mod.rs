@@ -6,12 +6,14 @@ pub use notification::*;
 pub use request::*;
 pub use response::*;
 
+use crate::error;
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum Frame<T = serde_json::Value> {
-    Response(Response<T>),
-    Request(Request<T>),
     Notification(Notification<T>),
+    Request(Request<T>),
+    Response(Response<T>),
 }
 
 impl<T> Frame<T> {
@@ -27,11 +29,32 @@ impl<T> Frame<T> {
         matches!(self, Self::Notification(_))
     }
 
-    pub fn payload(&self) -> Result<&T, &Error> {
+    pub fn try_request(&self) -> Result<&Request<T>, crate::Error> {
         match self {
-            Self::Request(v) => Ok(&v.params),
-            Self::Response(v) => v.payload(),
-            Self::Notification(v) => Ok(&v.body),
+            Self::Request(v) => Ok(v),
+            _ => Err(error::protocol("expected request frame")),
+        }
+    }
+
+    pub fn try_response(&self) -> Result<&Response<T>, crate::Error> {
+        match self {
+            Self::Response(v) => Ok(v),
+            _ => Err(error::protocol("expected response frame")),
+        }
+    }
+
+    pub fn try_notification(&self) -> Result<&Notification<T>, crate::Error> {
+        match self {
+            Self::Notification(v) => Ok(v),
+            _ => Err(error::protocol("expected notification frame")),
+        }
+    }
+
+    pub fn result(&self) -> Result<Option<&T>, &Error> {
+        match self {
+            Self::Request(v) => Ok(Some(&v.params)),
+            Self::Response(v) => v.result(),
+            Self::Notification(v) => Ok(Some(&v.body)),
         }
     }
 }
@@ -64,5 +87,106 @@ impl<T> From<Response<T>> for Frame<T> {
 impl<T> From<Notification<T>> for Frame<T> {
     fn from(value: Notification<T>) -> Self {
         Self::Notification(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Error, client, wire};
+
+    #[test]
+    fn notification() -> Result<(), Error> {
+        let frame: wire::Frame = serde_json::from_value(serde_json::json!({
+            "name": "stream.status",
+            "body": {
+                "stream_id": "test-123",
+                "sequence": 3,
+                "code": "thinking",
+                "message": "Thinking..."
+            }
+        }))?;
+
+        let value: wire::Notification<client::ClientEvent> = frame.try_notification()?.clone().try_cast_into()?;
+        let event = value.body.try_stream()?;
+        debug_assert_eq!(event.name(), "stream.status");
+        let json = serde_json::to_string(&value)?;
+        debug_assert_eq!(
+            json,
+            r#"{"name":"stream.status","body":{"stream_id":"test-123","sequence":3,"code":"thinking","message":"Thinking..."}}"#,
+            "{json}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn request() -> Result<(), Error> {
+        let frame: wire::Frame = serde_json::from_value(serde_json::json!({
+            "id": "019fb92c-e616-716f-9768-16c4753fe9d8",
+            "method": "connect",
+            "params": {
+                "name": "test",
+                "description": "a test agent...",
+                "secret": "abcdefg",
+                "skills": [
+                    {
+                        "name": "echo",
+                        "display_name": "Echo",
+                        "description": "I can echo back what you said to me"
+                    }
+                ]
+            }
+        }))?;
+
+        let value: wire::Request<client::ClientParams> = frame.try_request()?.clone().try_cast_into()?;
+        debug_assert_eq!(value.params.try_connect()?.name, "test");
+        let json = serde_json::to_string(&value)?;
+        debug_assert_eq!(
+            json,
+            r#"{"id":"019fb92c-e616-716f-9768-16c4753fe9d8","method":"connect","params":{"name":"test","description":"a test agent...","secret":"abcdefg","skills":[{"name":"echo","display_name":"Echo","description":"I can echo back what you said to me"}]}}"#,
+            "{json}"
+        );
+
+        Ok(())
+    }
+
+    mod response {
+        use super::*;
+
+        #[test]
+        fn error() -> Result<(), Error> {
+            let frame: wire::Frame = serde_json::from_value(serde_json::json!({
+                "id": "019fb92c-e616-716f-9768-16c4753fe9d8",
+                "error": {
+                    "code": -200,
+                    "message": "??"
+                }
+            }))?;
+
+            let error = frame.try_response()?.result().unwrap_err();
+            debug_assert_eq!(error.code, -200, "{error:#?}");
+            debug_assert_eq!(error.message, "??", "{error:#?}");
+            let json = serde_json::to_string(&frame)?;
+            debug_assert_eq!(
+                json, r#"{"id":"019fb92c-e616-716f-9768-16c4753fe9d8","error":{"code":-200,"message":"??"}}"#,
+                "{json}"
+            );
+
+            Ok(())
+        }
+
+        #[test]
+        fn result() -> Result<(), Error> {
+            let frame: wire::Frame = serde_json::from_value(serde_json::json!({
+                "id": "019fb92c-e616-716f-9768-16c4753fe9d8"
+            }))?;
+
+            let res = frame.try_response()?.result().unwrap();
+            debug_assert!(res.is_none(), "{frame:#?}");
+            let json = serde_json::to_string(&frame)?;
+            debug_assert_eq!(json, r#"{"id":"019fb92c-e616-716f-9768-16c4753fe9d8"}"#, "{json}");
+
+            Ok(())
+        }
     }
 }

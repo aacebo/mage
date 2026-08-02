@@ -2,8 +2,7 @@
 pub struct Notification<T = serde_json::Value> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_id: Option<uuid::Uuid>,
-
-    #[serde(flatten)]
+    pub name: String,
     pub body: T,
 }
 
@@ -14,7 +13,38 @@ impl Notification {
     {
         Ok(Notification {
             task_id: self.task_id,
+            name: self.name,
             body: serde_json::from_value(self.body)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Error, client, wire};
+
+    #[test]
+    fn serde() -> Result<(), Error> {
+        let frame: wire::Notification = serde_json::from_value(serde_json::json!({
+            "name": "stream.status",
+            "body": {
+                "stream_id": "test-123",
+                "sequence": 3,
+                "code": "thinking",
+                "message": "Thinking..."
+            }
+        }))?;
+
+        let value: wire::Notification<client::ClientEvent> = frame.try_cast_into()?;
+        let event = value.body.try_stream()?;
+        debug_assert_eq!(event.name(), "stream.status");
+        let json = serde_json::to_string(&value)?;
+        debug_assert_eq!(
+            json,
+            r#"{"name":"stream.status","body":{"stream_id":"test-123","sequence":3,"code":"thinking","message":"Thinking..."}}"#,
+            "{json}"
+        );
+
+        Ok(())
     }
 }

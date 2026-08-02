@@ -10,41 +10,52 @@ pub use open::*;
 pub use status::*;
 pub use text::*;
 
+use crate::{Error, error};
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
 #[serde(untagged)]
 pub enum StreamEvent {
-    Open(StreamOpenEvent),
     Close(StreamCloseEvent),
     Status(StreamStatusEvent),
     Text(StreamTextEvent),
+    Open(StreamOpenEvent),
 }
 
 impl StreamEvent {
-    pub fn as_open(&self) -> Option<&StreamOpenEvent> {
+    pub fn try_open(&self) -> Result<&StreamOpenEvent, Error> {
         match self {
-            Self::Open(v) => Some(v),
-            _ => None,
+            Self::Open(v) => Ok(v),
+            _ => Err(error::protocol("expected `stream.open` event")),
         }
     }
 
-    pub fn as_close(&self) -> Option<&StreamCloseEvent> {
+    pub fn try_status(&self) -> Result<&StreamStatusEvent, Error> {
         match self {
-            Self::Close(v) => Some(v),
-            _ => None,
+            Self::Status(v) => Ok(v),
+            _ => Err(error::protocol("expected `stream.status` event")),
         }
     }
 
-    pub fn as_status(&self) -> Option<&StreamStatusEvent> {
+    pub fn try_text(&self) -> Result<&StreamTextEvent, Error> {
         match self {
-            Self::Status(v) => Some(v),
-            _ => None,
+            Self::Text(v) => Ok(v),
+            _ => Err(error::protocol("expected `stream.text` event")),
         }
     }
 
-    pub fn as_text(&self) -> Option<&StreamTextEvent> {
+    pub fn try_close(&self) -> Result<&StreamCloseEvent, Error> {
         match self {
-            Self::Text(v) => Some(v),
-            _ => None,
+            Self::Close(v) => Ok(v),
+            _ => Err(error::protocol("expected `stream.close` event")),
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Open(_) => "stream.open",
+            Self::Status(_) => "stream.status",
+            Self::Text(_) => "stream.text",
+            Self::Close(_) => "stream.close",
         }
     }
 

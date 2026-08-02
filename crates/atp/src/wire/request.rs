@@ -23,7 +23,7 @@ mod tests {
     use crate::{Error, client, wire};
 
     #[test]
-    fn round_trip() -> Result<(), Error> {
+    fn serde() -> Result<(), Error> {
         let frame: wire::Request = serde_json::from_value(serde_json::json!({
             "id": "019fb92c-e616-716f-9768-16c4753fe9d8",
             "method": "connect",

@@ -5,7 +5,6 @@ pub use stream::*;
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum ClientEvent {
-    #[serde(untagged)]
     Stream(StreamEvent),
 }
 
