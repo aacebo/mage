@@ -62,3 +62,17 @@ pub enum Output<T = serde_json::Value> {
     Continue,
     Close,
 }
+
+impl<T> Output<T> {
+    pub fn is_frame(&self) -> bool {
+        matches!(self, Self::Frame(_))
+    }
+
+    pub fn is_continue(&self) -> bool {
+        matches!(self, Self::Continue)
+    }
+
+    pub fn is_close(&self) -> bool {
+        matches!(self, Self::Close)
+    }
+}
