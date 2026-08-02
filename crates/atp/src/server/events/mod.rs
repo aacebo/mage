@@ -2,18 +2,20 @@ mod message;
 
 pub use message::MessageEvent;
 
+use crate::{Error, error};
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "name", content = "body", rename_all = "snake_case")]
+#[serde(untagged)]
 pub enum ServerEvent {
     Message(MessageEvent),
 }
 
 impl ServerEvent {
-    pub fn as_message(&self) -> Option<&MessageEvent> {
+    pub fn try_message(&self) -> Result<&MessageEvent, Error> {
         match self {
-            Self::Message(v) => Some(v),
+            Self::Message(v) => Ok(v),
             #[allow(unused)]
-            _ => None,
+            _ => Err(error::protocol("expected message server event")),
         }
     }
 }
