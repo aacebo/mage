@@ -28,6 +28,7 @@ mod tests {
             "id": "019fb92c-e616-716f-9768-16c4753fe9d8",
             "method": "connect",
             "params": {
+                "id": "019fb92c-e616-716f-9768-16c4753fe9d9",
                 "name": "test",
                 "description": "a test agent...",
                 "secret": "abcdefg",
@@ -42,11 +43,15 @@ mod tests {
         }))?;
 
         let value: wire::Request<client::ClientParams> = frame.try_cast_into()?;
+        debug_assert_eq!(
+            value.params.try_connect()?.id,
+            "019fb92c-e616-716f-9768-16c4753fe9d9".parse::<uuid::Uuid>().unwrap()
+        );
         debug_assert_eq!(value.params.try_connect()?.name, "test");
         let json = serde_json::to_string(&value)?;
         debug_assert_eq!(
             json,
-            r#"{"id":"019fb92c-e616-716f-9768-16c4753fe9d8","method":"connect","params":{"name":"test","description":"a test agent...","secret":"abcdefg","skills":[{"name":"echo","display_name":"Echo","description":"I can echo back what you said to me"}]}}"#,
+            r#"{"id":"019fb92c-e616-716f-9768-16c4753fe9d8","method":"connect","params":{"id":"019fb92c-e616-716f-9768-16c4753fe9d9","name":"test","description":"a test agent...","secret":"abcdefg","skills":[{"name":"echo","display_name":"Echo","description":"I can echo back what you said to me"}]}}"#,
             "{json}"
         );
 

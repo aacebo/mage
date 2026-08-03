@@ -38,3 +38,24 @@ impl From<ClientParams> for ClientFrame {
         Self::Params(value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn connect_params_round_trip_through_client_frame() {
+        let agent_id = uuid::Uuid::now_v7();
+        let frame = ClientFrame::from(ClientParams::from(params::ConnectParams {
+            id: agent_id,
+            name: "test".to_string(),
+            description: "test agent".to_string(),
+            secret: "secret".to_string(),
+            skills: vec![],
+        }));
+
+        let json = serde_json::to_string(&frame).unwrap();
+        let decoded: ClientFrame = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.try_params().unwrap().try_connect().unwrap().id, agent_id);
+    }
+}

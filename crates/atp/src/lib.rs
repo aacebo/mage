@@ -40,3 +40,25 @@ impl<T> Output<T> {
         matches!(self, Self::Close { .. })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Output;
+
+    #[test]
+    fn close_preserves_transport_details() {
+        let output = Output::<serde_json::Value>::Close {
+            code: 1008,
+            message: Some("policy violation".to_string()),
+        };
+
+        assert!(output.is_close());
+        assert!(!output.is_frame());
+        assert!(!output.is_continue());
+        let Output::Close { code, message } = output else {
+            unreachable!();
+        };
+        assert_eq!(code, 1008);
+        assert_eq!(message.as_deref(), Some("policy violation"));
+    }
+}

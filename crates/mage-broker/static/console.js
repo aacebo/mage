@@ -54,6 +54,14 @@
         });
     }
 
+    async function decodeWebSocketJson(data) {
+        if (typeof data === "string") return JSON.parse(data);
+        if (data instanceof Blob) return JSON.parse(await data.text());
+        if (data instanceof ArrayBuffer) return JSON.parse(new TextDecoder().decode(data));
+        if (ArrayBuffer.isView(data)) return JSON.parse(new TextDecoder().decode(data));
+        throw new Error("Unsupported WebSocket frame type");
+    }
+
     function createConsole() {
         const config = readConfig();
         const state = Reducer.createState(config.tenant_id);
@@ -64,6 +72,7 @@
             database: null,
             eventSocket: null,
             agentSocket: null,
+            agentConnectRequestId: null,
             graph: null,
             reconnectTimer: null,
             reconnectDelay: 800,
@@ -585,32 +594,59 @@
                 this.disconnectAgent();
                 sessionStorage.setItem(`mage-agent-secret:${agent.id}`, this.agentSecret);
                 this.agentStatus = "connecting";
-                const socket = new WebSocket(
-                    websocketUrl("/agents/connect", {
-                        agent_id: agent.id,
-                        secret: this.agentSecret,
-                    }),
-                );
+                const socket = new WebSocket(websocketUrl("/agents/connect"));
+                const connectRequestId = crypto.randomUUID();
+                this.agentConnectRequestId = connectRequestId;
                 this.agentSocket = socket;
-                socket.onmessage = (message) => {
+                socket.binaryType = "arraybuffer";
+                socket.onopen = () => {
+                    socket.send(
+                        JSON.stringify({
+                            id: connectRequestId,
+                            method: "connect",
+                            params: {
+                                id: agent.id,
+                                name: agent.name,
+                                description: agent.description || "",
+                                secret: this.agentSecret,
+                                skills: agent.skills || [],
+                            },
+                        }),
+                    );
+                };
+                socket.onmessage = async (message) => {
                     try {
-                        const event = JSON.parse(message.data);
-                        this.ingestEvent(event);
-                        if (
-                            event.key === "actor.update" &&
-                            event.data?.actor?.id === agent.id &&
-                            event.data.actor.status === "online"
-                        ) {
+                        const frame = await decodeWebSocketJson(message.data);
+                        if (!frame.id) throw new Error("ATP response has no request id");
+
+                        if (frame.error) {
+                            const detail = frame.error.message || `ATP error ${frame.error.code}`;
+                            if (frame.id === connectRequestId) {
+                                this.agentStatus = "error";
+                                this.agentConnectRequestId = null;
+                                socket.close(1008, "connect rejected");
+                            }
+                            if (this.pendingTraceId === frame.id) this.pendingTraceId = null;
+                            this.error = detail;
+                            return;
+                        }
+
+                        if (frame.id === connectRequestId) {
+                            this.agentConnectRequestId = null;
                             this.agentStatus = "connected";
                             this.notice = `${agent.name} connected`;
+                        } else if (frame.id === this.pendingTraceId) {
+                            this.pendingTraceId = null;
+                            this.notice = `Accepted · ${frame.id.slice(0, 8)}`;
                         }
                     } catch (error) {
-                        this.error = `Invalid agent event: ${error.message}`;
+                        this.error = `Invalid ATP response: ${error.message}`;
                     }
                 };
                 socket.onclose = (event) => {
                     if (this.agentSocket !== socket) return;
                     this.agentSocket = null;
+                    this.agentConnectRequestId = null;
                     this.agentStatus = "disconnected";
                     if (event.code !== 1000 && event.reason) this.error = event.reason;
                 };
@@ -622,6 +658,7 @@
             disconnectAgent() {
                 const socket = this.agentSocket;
                 this.agentSocket = null;
+                this.agentConnectRequestId = null;
                 if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "console disconnect");
                 this.agentStatus = "disconnected";
             },
@@ -631,9 +668,7 @@
                 const content = this.structuredContent();
                 if (this.senderMode === "agent") {
                     return {
-                        type: "message_send",
-                        trace_id: this.draftTraceId,
-                        subject: this.subject || null,
+                        chat_id: this.currentChatId(),
                         content,
                         metadata,
                     };
@@ -763,8 +798,19 @@
                         if (!this.agentSocket || this.agentSocket.readyState !== WebSocket.OPEN || this.agentStatus !== "connected") {
                             throw new Error("Connect the selected agent before sending.");
                         }
-                        payload = { ...payload, type: "message_send", trace_id: traceId };
-                        this.agentSocket.send(JSON.stringify(payload));
+                        if (!payload.chat_id) throw new Error("Agent messages require an existing chat.");
+                        this.agentSocket.send(
+                            JSON.stringify({
+                                id: traceId,
+                                method: "message",
+                                params: {
+                                    chat_id: payload.chat_id,
+                                    reply_to_id: payload.reply_to_id || null,
+                                    content: payload.content,
+                                    metadata: payload.metadata || {},
+                                },
+                            }),
+                        );
                     } else {
                         payload = {
                             ...payload,
