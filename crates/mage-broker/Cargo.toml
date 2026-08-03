@@ -19,6 +19,7 @@ uuid.workspace = true
 chrono.workspace = true
 sqlx = { workspace = true, features = ["runtime-tokio", "postgres", "macros", "migrate"] }
 
+atp.workspace = true
 mage-amqp.workspace = true
 mage-error = { workspace = true, features = ["storage", "web"] }
 mage-storage.workspace = true

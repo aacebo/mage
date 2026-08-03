@@ -11,6 +11,7 @@ mod config;
 mod context;
 mod extract;
 mod routes;
+mod ws;
 
 pub use config::{Config, ConsoleConfig};
 pub use context::*;

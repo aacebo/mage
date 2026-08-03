@@ -36,12 +36,6 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-impl From<tokio_tungstenite::tungstenite::Error> for Error {
-    fn from(value: tokio_tungstenite::tungstenite::Error) -> Self {
-        Self::Socket(value.to_string())
-    }
-}
-
 impl From<wire::Error> for Error {
     fn from(value: wire::Error) -> Self {
         Error::Protocol(format!("{} => {}", value.code, value.message))

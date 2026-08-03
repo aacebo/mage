@@ -1,36 +1,18 @@
-use axum::extract::ws::{CloseCode, CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
+use atp::Socket;
+use axum::extract::ws;
 use axum::response::Response;
 use serde_valid::Validate;
 use tracing::Instrument;
 
+use crate::ws::WebSocket;
 use crate::{RequestContext, extract};
 
 const MAX_MESSAGE_SIZE: usize = 2 * 1024 * 1024;
 
-#[derive(Debug, serde::Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum Command {
-    MessageSend {
-        #[serde(default)]
-        trace_id: Option<uuid::Uuid>,
-
-        #[serde(default)]
-        chat_id: Option<uuid::Uuid>,
-
-        #[serde(default)]
-        subject: Option<String>,
-
-        content: mage_types::data::Contents,
-
-        #[serde(default)]
-        metadata: mage_types::data::Metadata,
-    },
-}
-
-pub async fn connect(ctx: RequestContext, actor: extract::Agent, upgrade: WebSocketUpgrade) -> Response {
+pub async fn connect(ctx: RequestContext, actor: extract::Agent, upgrade: ws::WebSocketUpgrade) -> Response {
     let span = tracing::info_span!(
         parent: ctx.span(),
-        "agent.connection",
+        "agent.session",
         agent_id = %actor.id,
         tenant_id = %actor.tenant_id,
     );
@@ -40,33 +22,35 @@ pub async fn connect(ctx: RequestContext, actor: extract::Agent, upgrade: WebSoc
         .on_upgrade(move |socket| run_session(ctx, socket, actor).instrument(span))
 }
 
-async fn run_session(ctx: RequestContext, mut socket: WebSocket, actor: extract::Agent) {
+async fn run_session(ctx: RequestContext, socket: impl Into<WebSocket>, actor: extract::Agent) {
     tracing::debug!("opening agent connection");
+
+    let mut socket = socket.into();
     let actor = match ctx.storage().actors().connect(actor.id).await {
         Ok(Some(actor)) => actor,
         Ok(None) => {
             tracing::error!("agent disappeared before connection state could be updated");
-            close(&mut socket, close_code::ERROR, "failed to update agent connection").await;
+            socket.panic("failed to update agent connection").await;
             return;
         }
         Err(error) => {
             tracing::error!(%error, "failed to update agent connection state");
-            close(&mut socket, close_code::ERROR, "failed to update agent connection").await;
+            socket.panic("failed to update agent connection").await;
             return;
         }
     };
 
-    let connection_event = match ctx.enqueue(actor.tenant_id, "actor.update", actor.clone()).await {
+    let event = match ctx.enqueue(actor.tenant_id, "actor.update", actor.clone()).await {
         Ok(event) => event,
         Err(error) => {
             tracing::error!(%error, "failed to enqueue agent connection event");
             let _ = ctx.storage().actors().disconnect(actor.id).await;
-            close(&mut socket, close_code::ERROR, "failed to persist connection event").await;
+            socket.panic("failed to persist connection event").await;
             return;
         }
     };
 
-    if emit(&mut socket, &connection_event).await.is_err() {
+    if emit(&mut socket, &event).await.is_err() {
         tracing::warn!("failed to emit agent connection event");
         disconnect(&ctx, actor.id).await;
         return;
@@ -77,7 +61,7 @@ async fn run_session(ctx: RequestContext, mut socket: WebSocket, actor: extract:
         "agent connected"
     );
 
-    while let Some(message) = socket.recv().await {
+    while let Some(message) = socket.read().await? {
         match message {
             Ok(Message::Text(text)) => {
                 let Ok(command) = serde_json::from_str::<Command>(text.as_str()) else {
@@ -199,13 +183,4 @@ async fn disconnect(ctx: &RequestContext, actor_id: uuid::Uuid) {
     }
 
     tracing::info!(%actor_id, ?instances, "agent disconnected");
-}
-
-async fn close(socket: &mut WebSocket, code: CloseCode, description: &str) {
-    let _ = socket
-        .send(Message::Close(Some(CloseFrame {
-            code,
-            reason: description.to_string().into(),
-        })))
-        .await;
 }

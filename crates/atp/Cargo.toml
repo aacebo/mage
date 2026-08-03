@@ -12,17 +12,9 @@ doctest = false
 workspace = true
 
 [dependencies]
-tokio = { workspace = true, features = ["net"] }
-tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
-
 serde_json.workspace = true
 serde_valid.workspace = true
 serde.workspace = true
 
 uuid.workspace = true
 chrono.workspace = true
-futures-util = { workspace = true, features = ["sink"] }
-
-[dev-dependencies]
-axum = { workspace = true, features = ["http1", "tokio", "ws"] }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
