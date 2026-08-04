@@ -22,34 +22,6 @@ pub enum StreamEvent {
 }
 
 impl StreamEvent {
-    pub fn try_open(&self) -> Result<&StreamOpenEvent, Error> {
-        match self {
-            Self::Open(v) => Ok(v),
-            _ => Err(error::protocol("expected `stream.open` event")),
-        }
-    }
-
-    pub fn try_status(&self) -> Result<&StreamStatusEvent, Error> {
-        match self {
-            Self::Status(v) => Ok(v),
-            _ => Err(error::protocol("expected `stream.status` event")),
-        }
-    }
-
-    pub fn try_text(&self) -> Result<&StreamTextEvent, Error> {
-        match self {
-            Self::Text(v) => Ok(v),
-            _ => Err(error::protocol("expected `stream.text` event")),
-        }
-    }
-
-    pub fn try_close(&self) -> Result<&StreamCloseEvent, Error> {
-        match self {
-            Self::Close(v) => Ok(v),
-            _ => Err(error::protocol("expected `stream.close` event")),
-        }
-    }
-
     pub fn name(&self) -> &'static str {
         match self {
             Self::Open(_) => "stream.open",
@@ -74,6 +46,34 @@ impl StreamEvent {
             Self::Status(v) => v.sequence,
             Self::Text(v) => v.sequence,
             Self::Close(v) => v.sequence,
+        }
+    }
+
+    pub fn try_into_open(self) -> Result<StreamOpenEvent, Error> {
+        match self {
+            Self::Open(v) => Ok(v),
+            v => Err(error::invalid_request(format!("expected `stream.open`, received `{}`", v.name())).into()),
+        }
+    }
+
+    pub fn try_into_status(self) -> Result<StreamStatusEvent, Error> {
+        match self {
+            Self::Status(v) => Ok(v),
+            v => Err(error::invalid_request(format!("expected `stream.status`, received `{}`", v.name())).into()),
+        }
+    }
+
+    pub fn try_into_text(self) -> Result<StreamTextEvent, Error> {
+        match self {
+            Self::Text(v) => Ok(v),
+            v => Err(error::invalid_request(format!("expected `stream.text`, received `{}`", v.name())).into()),
+        }
+    }
+
+    pub fn try_into_close(self) -> Result<StreamCloseEvent, Error> {
+        match self {
+            Self::Close(v) => Ok(v),
+            v => Err(error::invalid_request(format!("expected `stream.close`, received `{}`", v.name())).into()),
         }
     }
 }

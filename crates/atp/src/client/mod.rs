@@ -4,32 +4,34 @@ mod params;
 pub use events::*;
 pub use params::*;
 
-use crate::{error, wire};
+use crate::wire;
 
-pub trait Observe {
+pub trait Observe: Send {
+    type Error;
+
     fn on_frame(
-        &self,
+        &mut self,
         frame: wire::Frame<ClientFrame>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>> + '_>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async {
             match frame {
                 wire::Frame::Notification(v) => {
                     let body = v.body.clone();
-                    self.on_event(v.cast_with(body.try_event()?.clone())).await
+                    self.on_event(v.cast_with(body.try_into_event()?)).await
                 }
                 wire::Frame::Request(v) => {
                     let params = v.params.clone();
-                    self.on_request(v.cast_with(params.try_params()?.clone())).await
+                    self.on_request(v.cast_with(params.try_into_params()?)).await
                 }
-                wire::Frame::Response(_) => Err(error::protocol("unsupported client response")),
+                _ => Ok(()),
             }
         })
     }
 
     fn on_event(
-        &self,
+        &mut self,
         event: wire::Notification<ClientEvent>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>> + '_>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async move {
             match event.body.clone() {
                 ClientEvent::Stream(e) => self.on_stream_event(event.cast_with(e)).await,
@@ -38,9 +40,9 @@ pub trait Observe {
     }
 
     fn on_request(
-        &self,
+        &mut self,
         req: wire::Request<ClientParams>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>> + '_>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async move {
             match req.params.clone() {
                 ClientParams::Connect(params) => self.on_connect_request(req.cast_with(params)).await,
@@ -50,23 +52,23 @@ pub trait Observe {
     }
 
     fn on_connect_request(
-        &self,
+        &mut self,
         _req: wire::Request<ConnectParams>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>>>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async { Ok(()) })
     }
 
     fn on_message_request(
-        &self,
+        &mut self,
         _req: wire::Request<MessageParams>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>>>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async { Ok(()) })
     }
 
     fn on_stream_event(
-        &self,
+        &mut self,
         event: wire::Notification<StreamEvent>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>> + '_>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async {
             match event.body.clone() {
                 StreamEvent::Open(e) => self.on_stream_open_event(event.cast_with(e)).await,
@@ -78,30 +80,30 @@ pub trait Observe {
     }
 
     fn on_stream_open_event(
-        &self,
+        &mut self,
         _event: wire::Notification<StreamOpenEvent>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>>>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async { Ok(()) })
     }
 
     fn on_stream_close_event(
-        &self,
+        &mut self,
         _event: wire::Notification<StreamCloseEvent>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>>>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async { Ok(()) })
     }
 
     fn on_stream_status_event(
-        &self,
+        &mut self,
         _event: wire::Notification<StreamStatusEvent>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>>>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async { Ok(()) })
     }
 
     fn on_stream_text_event(
-        &self,
+        &mut self,
         _event: wire::Notification<StreamTextEvent>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>>>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async { Ok(()) })
     }
 }
@@ -114,17 +116,17 @@ pub enum ClientFrame {
 }
 
 impl ClientFrame {
-    pub fn try_event(&self) -> Result<&ClientEvent, crate::Error> {
+    pub fn try_into_event(self) -> Result<ClientEvent, Box<dyn std::error::Error>> {
         match self {
             Self::Event(v) => Ok(v),
-            _ => Err(crate::error::protocol("expected client event frame")),
+            _ => Err(crate::error::invalid_request("expected event").into()),
         }
     }
 
-    pub fn try_params(&self) -> Result<&ClientParams, crate::Error> {
+    pub fn try_into_params(self) -> Result<ClientParams, Box<dyn std::error::Error>> {
         match self {
             Self::Params(v) => Ok(v),
-            _ => Err(crate::error::protocol("expected client params frame")),
+            _ => Err(crate::error::invalid_request("expected request").into()),
         }
     }
 }
@@ -143,7 +145,55 @@ impl From<ClientParams> for ClientFrame {
 
 #[cfg(test)]
 mod tests {
+    use std::future::Future;
+    use std::task::{Context, Poll, Waker};
+
     use super::*;
+
+    fn block_on<F: Future>(future: F) -> F::Output {
+        let waker = Waker::noop();
+        let mut context = Context::from_waker(waker);
+        let mut future = std::pin::pin!(future);
+
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Poll::Ready(output) => return output,
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
+
+    fn assert_send<T: Send>(_: &T) {}
+
+    #[derive(Default)]
+    struct Recorder {
+        connects: usize,
+        statuses: usize,
+    }
+
+    impl Observe for Recorder {
+        type Error = crate::Error;
+
+        fn on_connect_request(
+            &mut self,
+            _req: wire::Request<ConnectParams>,
+        ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
+            Box::pin(async move {
+                self.connects += 1;
+                Ok(())
+            })
+        }
+
+        fn on_stream_status_event(
+            &mut self,
+            _event: wire::Notification<StreamStatusEvent>,
+        ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
+            Box::pin(async move {
+                self.statuses += 1;
+                Ok(())
+            })
+        }
+    }
 
     #[test]
     fn connect_params_round_trip_through_client_frame() {
@@ -159,5 +209,40 @@ mod tests {
         let json = serde_json::to_string(&frame).unwrap();
         let decoded: ClientFrame = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.try_params().unwrap().try_connect().unwrap().id, agent_id);
+    }
+
+    #[test]
+    fn observer_mutably_dispatches_typed_requests_and_events_with_send_futures() {
+        let mut observer = Recorder::default();
+        let connect = wire::Request {
+            id: uuid::Uuid::now_v7(),
+            method: "connect".to_string(),
+            params: ClientFrame::from(ClientParams::from(ConnectParams {
+                id: uuid::Uuid::now_v7(),
+                name: "test".to_string(),
+                description: "test agent".to_string(),
+                secret: "secret".to_string(),
+                skills: vec![],
+            })),
+        };
+        let future = observer.on_frame(connect.into());
+        assert_send(&future);
+        block_on(future).unwrap();
+        assert_eq!(observer.connects, 1);
+
+        let status = wire::Notification {
+            task_id: Some(uuid::Uuid::now_v7()),
+            name: "stream.status".to_string(),
+            body: ClientFrame::from(ClientEvent::from(StreamEvent::from(StreamStatusEvent {
+                stream_id: "stream-1".to_string(),
+                sequence: 1,
+                code: StatusCode::Working,
+                message: "working".to_string(),
+            }))),
+        };
+        let future = observer.on_frame(status.into());
+        assert_send(&future);
+        block_on(future).unwrap();
+        assert_eq!(observer.statuses, 1);
     }
 }

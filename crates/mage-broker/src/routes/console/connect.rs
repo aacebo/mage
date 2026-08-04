@@ -5,7 +5,6 @@ use axum::body::Bytes;
 use axum::extract::Query;
 use axum::extract::ws::{CloseCode, CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
 use axum::response::Response;
-use tracing::Instrument;
 
 use crate::RequestContext;
 
@@ -20,18 +19,19 @@ pub(super) struct ReplayQuery {
 pub async fn connect(ctx: RequestContext, Query(query): Query<ReplayQuery>, upgrade: WebSocketUpgrade) -> Response {
     let tenant_id = ctx.console().tenant_id.unwrap();
     let cursor = query.after_id;
-    let span = tracing::info_span!(
-        parent: ctx.span(),
-        "console.connection",
-        tenant_id = %tenant_id,
-        replay_after_id = ?cursor,
-    );
 
     upgrade
         .max_message_size(64 * 1024)
-        .on_upgrade(move |socket| run_stream(ctx, tenant_id, cursor, socket).instrument(span))
+        .on_upgrade(move |socket| run_stream(ctx, tenant_id, cursor, socket))
 }
 
+#[tracing::instrument(
+    level = "info",
+    name = "console.connection",
+    parent = ctx.span(),
+    skip(ctx, socket),
+    fields(tenant_id = %tenant_id, replay_after_id = ?cursor)
+)]
 async fn run_stream(ctx: RequestContext, tenant_id: uuid::Uuid, cursor: Option<uuid::Uuid>, mut socket: WebSocket) {
     let binding = "#".parse().expect("the console event binding is valid");
     let mut events = match ctx.socket().subscribe(&[binding]).await {

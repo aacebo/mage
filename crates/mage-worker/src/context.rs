@@ -7,25 +7,19 @@ use sqlx::PgPool;
 #[derive(Clone)]
 pub struct Context<'a> {
     pool: &'a PgPool,
-    span: tracing::Span,
     socket: &'a mage_amqp::Socket,
     start_time: DateTime<Utc>,
     routing: crate::RoutingPolicy,
 }
 
 impl<'a> Context<'a> {
-    pub fn new(pool: &'a PgPool, span: tracing::Span, socket: &'a mage_amqp::Socket, routing: crate::RoutingPolicy) -> Self {
+    pub fn new(pool: &'a PgPool, socket: &'a mage_amqp::Socket, routing: crate::RoutingPolicy) -> Self {
         Self {
             pool,
-            span,
             socket,
             start_time: Utc::now(),
             routing,
         }
-    }
-
-    pub fn span(&self) -> &tracing::Span {
-        &self.span
     }
 
     pub fn start_time(&self) -> DateTime<Utc> {

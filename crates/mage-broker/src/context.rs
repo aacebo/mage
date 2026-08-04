@@ -9,7 +9,6 @@ use axum::response::Response;
 use chrono::{DateTime, Utc};
 use mage_storage::Storage;
 use sqlx::PgPool;
-use tracing::Instrument;
 
 use crate::{ConsoleConfig, ws};
 
@@ -103,6 +102,22 @@ impl RequestContext {
         self.enqueue_with_trace(tenant_id, self.request_id, key, body).await
     }
 
+    #[tracing::instrument(
+        level = "info",
+        name = "event.enqueue",
+        parent = self.span(),
+        skip_all,
+        fields(
+            event_key = %key,
+            event_id = tracing::field::Empty,
+            trace_id = %trace_id,
+            tenant_id = %tenant_id,
+            actor_id = tracing::field::Empty,
+            chat_id = tracing::field::Empty,
+            message_id = tracing::field::Empty,
+            task_id = tracing::field::Empty,
+        )
+    )]
     pub async fn enqueue_with_trace(
         &self,
         tenant_id: uuid::Uuid,
@@ -116,45 +131,35 @@ impl RequestContext {
         let message_id = data.message_id();
         let task_id = data.task_id();
         let event = mage_types::events::new(tenant_id, trace_id, key, data);
-        let span = tracing::info_span!(
-            parent: self.span(),
-            "event.enqueue",
-            event_key = %event.key,
-            event_id = %event.id,
-            trace_id = %event.trace_id,
-            tenant_id = %event.tenant_id,
-            actor_id = ?actor_id,
-            chat_id = ?chat_id,
-            message_id = ?message_id,
-            task_id = ?task_id,
-        );
+        let span = tracing::Span::current();
+        span.record("event_id", tracing::field::display(event.id));
+        span.record("actor_id", tracing::field::debug(actor_id));
+        span.record("chat_id", tracing::field::debug(chat_id));
+        span.record("message_id", tracing::field::debug(message_id));
+        span.record("task_id", tracing::field::debug(task_id));
 
-        async {
-            let event = match self
-                .storage()
-                .events()
-                .create(actor_id, chat_id, message_id, task_id, event)
-                .await
-            {
-                Ok(event) => event,
-                Err(error) => {
-                    tracing::error!(%error, "failed to persist event");
-                    return Err(error);
-                }
-            };
-
-            tracing::debug!("persisted event");
-
-            if let Err(error) = self.socket.produce().enqueue(event.clone()).await {
-                tracing::error!(%error, "failed to publish event to RabbitMQ");
+        let event = match self
+            .storage()
+            .events()
+            .create(actor_id, chat_id, message_id, task_id, event)
+            .await
+        {
+            Ok(event) => event,
+            Err(error) => {
+                tracing::error!(%error, "failed to persist event");
                 return Err(error);
             }
+        };
 
-            tracing::debug!("published event to RabbitMQ");
-            Ok(event)
+        tracing::debug!("persisted event");
+
+        if let Err(error) = self.socket.produce().enqueue(event.clone()).await {
+            tracing::error!(%error, "failed to publish event to RabbitMQ");
+            return Err(error);
         }
-        .instrument(span)
-        .await
+
+        tracing::debug!("published event to RabbitMQ");
+        Ok(event)
     }
 }
 
@@ -183,6 +188,18 @@ impl std::ops::Deref for RequestContext {
     }
 }
 
+#[tracing::instrument(
+    level = "info",
+    name = "http.request",
+    skip_all,
+    fields(
+        request_id = tracing::field::Empty,
+        method = tracing::field::Empty,
+        path = tracing::field::Empty,
+        status = tracing::field::Empty,
+        elapsed_ms = tracing::field::Empty,
+    )
+)]
 pub async fn request_middleware(State(ctx): State<Arc<Context>>, mut request: Request, next: Next) -> Response {
     let method = request.method().clone();
     let path = request.uri().path().to_string();
@@ -192,37 +209,28 @@ pub async fn request_middleware(State(ctx): State<Arc<Context>>, mut request: Re
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse().ok())
         .unwrap_or_else(uuid::Uuid::now_v7);
-    let span = tracing::info_span!(
-        "http.request",
-        request_id = %request_id,
-        method = %method,
-        path = %path,
-        status = tracing::field::Empty,
-        elapsed_ms = tracing::field::Empty,
-    );
+    let span = tracing::Span::current();
+    span.record("request_id", tracing::field::display(request_id));
+    span.record("method", tracing::field::display(&method));
+    span.record("path", tracing::field::display(&path));
 
     request
         .extensions_mut()
         .insert(RequestContext::new(ctx, headers, request_id, span.clone()));
-    let completion_span = span.clone();
 
-    async move {
-        let started_at = Instant::now();
-        tracing::debug!("request started");
-        let response = next.run(request).await;
-        let elapsed_ms = started_at.elapsed().as_millis() as u64;
-        let status = response.status().as_u16();
-        completion_span.record("status", status);
-        completion_span.record("elapsed_ms", elapsed_ms);
+    let started_at = Instant::now();
+    tracing::debug!("request started");
+    let response = next.run(request).await;
+    let elapsed_ms = started_at.elapsed().as_millis() as u64;
+    let status = response.status().as_u16();
+    span.record("status", status);
+    span.record("elapsed_ms", elapsed_ms);
 
-        if status >= 500 {
-            tracing::error!("request completed");
-        } else {
-            tracing::info!("request completed");
-        }
-
-        response
+    if status >= 500 {
+        tracing::error!("request completed");
+    } else {
+        tracing::info!("request completed");
     }
-    .instrument(span)
-    .await
+
+    response
 }

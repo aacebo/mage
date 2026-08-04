@@ -7,7 +7,7 @@ pub struct Notification<T = serde_json::Value> {
 }
 
 impl Notification {
-    pub fn try_cast_into<T>(self) -> Result<Notification<T>, crate::Error>
+    pub fn try_cast_into<T>(self) -> Result<Notification<T>, Box<dyn std::error::Error>>
     where
         T: for<'a> serde::Deserialize<'a>,
     {

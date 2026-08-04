@@ -6,7 +6,7 @@ pub use notification::*;
 pub use request::*;
 pub use response::*;
 
-use crate::error;
+use crate::{Error, error};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
@@ -29,24 +29,24 @@ impl<T> Frame<T> {
         matches!(self, Self::Notification(_))
     }
 
-    pub fn try_request(&self) -> Result<&Request<T>, crate::Error> {
+    pub fn try_into_request(self) -> Result<Request<T>, Box<dyn std::error::Error>> {
         match self {
             Self::Request(v) => Ok(v),
-            _ => Err(error::protocol("expected request frame")),
+            _ => Err(error::invalid_request("expected request").into()),
         }
     }
 
-    pub fn try_response(&self) -> Result<&Response<T>, crate::Error> {
+    pub fn try_into_response(self) -> Result<Response<T>, Box<dyn std::error::Error>> {
         match self {
             Self::Response(v) => Ok(v),
-            _ => Err(error::protocol("expected response frame")),
+            _ => Err(error::invalid_request("expected response").into()),
         }
     }
 
-    pub fn try_notification(&self) -> Result<&Notification<T>, crate::Error> {
+    pub fn try_into_notification(self) -> Result<Notification<T>, Box<dyn std::error::Error>> {
         match self {
             Self::Notification(v) => Ok(v),
-            _ => Err(error::protocol("expected notification frame")),
+            _ => Err(error::invalid_request("expected notification").into()),
         }
     }
 
@@ -60,7 +60,7 @@ impl<T> Frame<T> {
 }
 
 impl Frame {
-    pub fn try_cast_into<T>(self) -> Result<Frame<T>, crate::Error>
+    pub fn try_cast_into<T>(self) -> Result<Frame<T>, Box<dyn std::error::Error>>
     where
         T: for<'a> serde::Deserialize<'a>,
     {

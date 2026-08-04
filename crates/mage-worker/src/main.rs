@@ -1,5 +1,4 @@
 use sqlx::postgres::PgPoolOptions;
-use tracing::Instrument;
 use tracing_subscriber::EnvFilter;
 
 mod config;
@@ -44,25 +43,10 @@ async fn main() -> mage_error::Result<()> {
             }
         };
 
-        let span = tracing::info_span!(
-            "event.delivery",
-            event_key = %event.key,
-            event_id = %event.id,
-            trace_id = %event.trace_id,
-        );
+        let ctx = Context::new(&pool, &socket, config.routing);
+        let ctx = EventContext::new(&ctx, &delivery, &event);
 
-        let ctx = Context::new(&pool, span, &socket, config.routing);
-
-        async {
-            tracing::debug!("received event delivery");
-            let ctx = EventContext::new(&ctx, &delivery, &event);
-
-            if let Err(error) = events::run(&ctx).await {
-                tracing::error!(%error, "failed to settle event delivery");
-            }
-        }
-        .instrument(ctx.span().clone())
-        .await;
+        let _ = events::run(&ctx).await;
     }
 
     Ok(())

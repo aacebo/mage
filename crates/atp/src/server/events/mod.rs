@@ -14,8 +14,6 @@ impl ServerEvent {
     pub fn try_message(&self) -> Result<&MessageEvent, Error> {
         match self {
             Self::Message(v) => Ok(v),
-            #[allow(unused)]
-            _ => Err(error::protocol("expected message server event")),
         }
     }
 }

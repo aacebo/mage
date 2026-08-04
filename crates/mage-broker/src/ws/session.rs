@@ -8,8 +8,40 @@ use tokio::sync::RwLock;
 use super::*;
 
 pub struct Session {
-    pub id: uuid::Uuid,
-    pub sender: tokio::sync::mpsc::WeakUnboundedSender<ws::Message>,
+    id: uuid::Uuid,
+    sender: tokio::sync::mpsc::WeakUnboundedSender<ws::Message>,
+}
+
+impl Session {
+    pub fn id(&self) -> uuid::Uuid {
+        self.id
+    }
+
+    pub fn send(&self, message: impl Into<ws::Message>) -> Result<(), atp::Error> {
+        self.sender
+            .upgrade()
+            .ok_or(atp::error::socket("inactive socket"))?
+            .send(message.into())
+            .map_err(atp::error::socket)
+    }
+}
+
+impl From<tokio::sync::mpsc::WeakUnboundedSender<ws::Message>> for Session {
+    fn from(sender: tokio::sync::mpsc::WeakUnboundedSender<ws::Message>) -> Self {
+        Self {
+            id: uuid::Uuid::now_v7(),
+            sender,
+        }
+    }
+}
+
+impl From<tokio::sync::mpsc::UnboundedSender<ws::Message>> for Session {
+    fn from(sender: tokio::sync::mpsc::UnboundedSender<ws::Message>) -> Self {
+        Self {
+            id: uuid::Uuid::now_v7(),
+            sender: sender.downgrade(),
+        }
+    }
 }
 
 pub struct Pool {

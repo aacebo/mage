@@ -8,21 +8,25 @@ pub use error::Error;
 
 pub trait Socket {
     type Error;
-    type In: for<'a> serde::Deserialize<'a>;
-    type Out: serde::Serialize;
 
-    fn read(&mut self) -> std::pin::Pin<Box<impl Future<Output = Result<Output<Self::In>, Self::Error>>>>;
-    fn write(
+    fn read<T>(&mut self) -> std::pin::Pin<Box<impl Future<Output = Result<Output<T>, Self::Error>>>>
+    where
+        T: for<'a> serde::Deserialize<'a>;
+
+    fn write<T>(&mut self, item: T) -> std::pin::Pin<Box<impl Future<Output = Result<(), Self::Error>>>>
+    where
+        T: serde::Serialize;
+
+    fn close(
         &mut self,
-        item: impl Into<wire::Frame<Self::Out>>,
+        code: CloseCode,
+        reason: Option<impl std::fmt::Display>,
     ) -> std::pin::Pin<Box<impl Future<Output = Result<(), Self::Error>>>>;
-    fn flush(&mut self) -> std::pin::Pin<Box<impl Future<Output = Result<usize, Self::Error>>>>;
-    fn close(&mut self) -> std::pin::Pin<Box<impl Future<Output = Result<(), Self::Error>>>>;
 }
 
 #[derive(Debug, Clone)]
 pub enum Output<T = serde_json::Value> {
-    Frame(wire::Frame<T>),
+    Frame(T),
     Continue,
     Close { code: CloseCode, message: Option<String> },
 }
@@ -52,6 +56,17 @@ pub enum CloseCode {
     InternalError = 1011,
 }
 
+impl CloseCode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Normal => "normal",
+            Self::InvalidData => "invalid data",
+            Self::Policy => "policy",
+            Self::InternalError => "internal error",
+        }
+    }
+}
+
 impl TryFrom<u16> for CloseCode {
     type Error = Error;
 
@@ -68,12 +83,7 @@ impl TryFrom<u16> for CloseCode {
 
 impl std::fmt::Display for CloseCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Normal => write!(f, "normal"),
-            Self::InvalidData => write!(f, "invalid_data"),
-            Self::Policy => write!(f, "policy"),
-            Self::InternalError => write!(f, "internal_error"),
-        }
+        write!(f, "{}", self.as_str())
     }
 }
 

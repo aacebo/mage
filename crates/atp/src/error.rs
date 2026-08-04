@@ -1,61 +1,56 @@
-use crate::wire;
-
-pub fn protocol(message: impl std::fmt::Display) -> Error {
-    Error::Protocol(message.to_string())
+pub fn parse(message: impl std::fmt::Display) -> Error {
+    Error {
+        code: Error::PARSE,
+        message: message.to_string(),
+    }
 }
 
-pub fn socket(message: impl std::fmt::Display) -> Error {
-    Error::Socket(message.to_string())
+pub fn invalid_request(message: impl std::fmt::Display) -> Error {
+    Error {
+        code: Error::INVALID_REQUEST,
+        message: message.to_string(),
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "code", content = "message")]
-pub enum Error {
-    Protocol(String),
-    Json(String),
-    Socket(String),
+pub fn method_not_found(message: impl std::fmt::Display) -> Error {
+    Error {
+        code: Error::METHOD_NOT_FOUND,
+        message: message.to_string(),
+    }
+}
+
+pub fn invalid_params(message: impl std::fmt::Display) -> Error {
+    Error {
+        code: Error::INVALID_PARAMS,
+        message: message.to_string(),
+    }
+}
+
+pub fn internal(message: impl std::fmt::Display) -> Error {
+    Error {
+        code: Error::INTERNAL,
+        message: message.to_string(),
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Error {
+    pub code: i64,
+    pub message: String,
 }
 
 impl Error {
-    pub fn code(&self) -> &str {
-        match self {
-            Self::Protocol(_) => "protocol",
-            Self::Json(_) => "json",
-            Self::Socket(_) => "socket",
-        }
-    }
-
-    pub fn message(&self) -> &str {
-        match self {
-            Self::Protocol(v) => v.as_str(),
-            Self::Json(v) => v.as_str(),
-            Self::Socket(v) => v.as_str(),
-        }
-    }
+    pub const PARSE: i64 = -32700;
+    pub const INVALID_REQUEST: i64 = -32600;
+    pub const METHOD_NOT_FOUND: i64 = -32601;
+    pub const INVALID_PARAMS: i64 = -32602;
+    pub const INTERNAL: i64 = -32603;
 }
 
-impl From<serde_json::Error> for Error {
-    fn from(value: serde_json::Error) -> Self {
-        Self::Json(value.to_string())
-    }
-}
-
-impl From<wire::Error> for Error {
-    fn from(value: wire::Error) -> Self {
-        Error::Protocol(format!("{} => {}", value.code, value.message))
-    }
-}
-
-impl From<&wire::Error> for Error {
-    fn from(value: &wire::Error) -> Self {
-        Error::Protocol(format!("{} => {}", value.code, value.message))
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} => {}", self.code, self.message)
     }
 }
 
 impl std::error::Error for Error {}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} => {}", self.code(), self.message())
-    }
-}

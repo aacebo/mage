@@ -6,7 +6,7 @@ pub struct Request<T = serde_json::Value> {
 }
 
 impl Request {
-    pub fn try_cast_into<T>(self) -> Result<Request<T>, crate::Error>
+    pub fn try_cast_into<T>(self) -> Result<Request<T>, Box<dyn std::error::Error>>
     where
         T: for<'a> serde::Deserialize<'a>,
     {

@@ -17,17 +17,24 @@ pub enum ClientParams {
 }
 
 impl ClientParams {
-    pub fn try_connect(&self) -> Result<&ConnectParams, crate::Error> {
+    pub fn method(&self) -> &'static str {
         match self {
-            Self::Connect(v) => Ok(v),
-            _ => Err(crate::error::protocol("expected connect request")),
+            Self::Connect(_) => "connect",
+            Self::Message(_) => "message",
         }
     }
 
-    pub fn try_message(&self) -> Result<&MessageParams, crate::Error> {
+    pub fn try_into_connect(self) -> Result<ConnectParams, Box<dyn std::error::Error>> {
+        match self {
+            Self::Connect(v) => Ok(v),
+            v => Err(crate::error::invalid_request(format!("expected `connect`, received `{}`", v.method())).into()),
+        }
+    }
+
+    pub fn try_into_message(self) -> Result<MessageParams, Box<dyn std::error::Error>> {
         match self {
             Self::Message(v) => Ok(v),
-            _ => Err(crate::error::protocol("expected message request")),
+            v => Err(crate::error::invalid_request(format!("expected `message`, received `{}`", v.method())).into()),
         }
     }
 }

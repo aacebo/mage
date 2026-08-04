@@ -1,45 +1,19 @@
 pub mod session;
 
-use std::collections::VecDeque;
-
 use axum::extract::ws;
 pub use session::*;
 
 pub struct WebSocket {
     inner: ws::WebSocket,
-    queue: VecDeque<ws::Message>,
-}
-
-impl WebSocket {
-    pub fn close_with(
-        &mut self,
-        code: atp::CloseCode,
-        reason: impl std::fmt::Display,
-    ) -> std::pin::Pin<Box<impl Future<Output = Result<(), atp::Error>>>> {
-        let reason = reason.to_string();
-
-        Box::pin(async move {
-            while let Some(message) = self.queue.pop_front() {
-                self.inner.send(message).await.map_err(atp::error::socket)?;
-            }
-
-            self.inner
-                .send(ws::Message::Close(Some(ws::CloseFrame {
-                    code: code as u16,
-                    reason: reason.into(),
-                })))
-                .await
-                .map_err(atp::error::socket)
-        })
-    }
 }
 
 impl atp::Socket for WebSocket {
     type Error = atp::Error;
-    type In = atp::client::ClientFrame;
-    type Out = atp::server::ServerFrame;
 
-    fn read(&mut self) -> std::pin::Pin<Box<impl Future<Output = Result<atp::Output<Self::In>, Self::Error>>>> {
+    fn read<T>(&mut self) -> std::pin::Pin<Box<impl Future<Output = Result<atp::Output<T>, Self::Error>>>>
+    where
+        T: for<'a> serde::Deserialize<'a>,
+    {
         Box::pin(async move {
             match self.inner.recv().await {
                 Some(Ok(ws::Message::Text(text))) => Ok(atp::Output::Frame(serde_json::from_str(text.as_str())?)),
@@ -58,42 +32,30 @@ impl atp::Socket for WebSocket {
         })
     }
 
-    fn write(
-        &mut self,
-        item: impl Into<atp::wire::Frame<Self::Out>>,
-    ) -> std::pin::Pin<Box<impl Future<Output = Result<(), Self::Error>>>> {
-        let item = item.into();
-
+    fn write<T>(&mut self, item: T) -> std::pin::Pin<Box<impl Future<Output = Result<(), Self::Error>>>>
+    where
+        T: serde::Serialize,
+    {
         Box::pin(async move {
             let bytes = serde_json::to_vec(&item)?;
-            self.queue.push_back(ws::Message::Binary(bytes.into()));
+            self.inner
+                .send(ws::Message::Binary(bytes.into()))
+                .await
+                .map_err(atp::error::socket)?;
             Ok(())
         })
     }
 
-    fn flush(&mut self) -> std::pin::Pin<Box<impl Future<Output = Result<usize, Self::Error>>>> {
+    fn close(
+        &mut self,
+        code: atp::CloseCode,
+        reason: Option<impl std::fmt::Display>,
+    ) -> std::pin::Pin<Box<impl Future<Output = Result<(), Self::Error>>>> {
         Box::pin(async move {
-            let mut count = 0;
-
-            while let Some(message) = self.queue.pop_front() {
-                self.inner.send(message).await.map_err(atp::error::socket)?;
-                count += 1;
-            }
-
-            Ok(count)
-        })
-    }
-
-    fn close(&mut self) -> std::pin::Pin<Box<impl Future<Output = Result<(), Self::Error>>>> {
-        Box::pin(async move {
-            while let Some(message) = self.queue.pop_front() {
-                self.inner.send(message).await.map_err(atp::error::socket)?;
-            }
-
             self.inner
                 .send(ws::Message::Close(Some(ws::CloseFrame {
-                    code: atp::CloseCode::Normal as u16,
-                    reason: "normal closure".into(),
+                    code: code as u16,
+                    reason: reason.map_or("normal closure".to_string(), |v| v.to_string()).into(),
                 })))
                 .await
                 .map_err(atp::error::socket)
@@ -103,9 +65,6 @@ impl atp::Socket for WebSocket {
 
 impl From<ws::WebSocket> for WebSocket {
     fn from(inner: ws::WebSocket) -> Self {
-        Self {
-            inner,
-            queue: VecDeque::new(),
-        }
+        Self { inner }
     }
 }
