@@ -11,6 +11,8 @@ use mage_storage::Storage;
 use sqlx::PgPool;
 use tracing::Instrument;
 
+use crate::{ConsoleConfig, ws};
+
 const REQUEST_ID_HEADER: &str = "X-Request-ID";
 
 #[derive(Clone)]
@@ -18,16 +20,18 @@ pub struct Context {
     pool: PgPool,
     socket: mage_amqp::Socket,
     start_time: DateTime<Utc>,
-    console: crate::ConsoleConfig,
+    console: ConsoleConfig,
+    connections: ws::Connections,
 }
 
 impl Context {
-    pub fn new(pool: PgPool, socket: mage_amqp::Socket, console: crate::ConsoleConfig) -> Self {
+    pub fn new(pool: PgPool, socket: mage_amqp::Socket, console: ConsoleConfig) -> Self {
         Self {
             pool,
             socket,
             start_time: Utc::now(),
             console,
+            connections: ws::Connections::new(),
         }
     }
 
@@ -47,8 +51,12 @@ impl Context {
         &self.socket
     }
 
-    pub fn console(&self) -> &crate::ConsoleConfig {
+    pub fn console(&self) -> &ConsoleConfig {
         &self.console
+    }
+
+    pub fn connections(&self) -> &ws::Connections {
+        &self.connections
     }
 }
 

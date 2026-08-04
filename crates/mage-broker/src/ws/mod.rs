@@ -1,11 +1,9 @@
+pub mod session;
+
 use std::collections::VecDeque;
 
 use axum::extract::ws;
-
-pub const NORMAL_CLOSE: u16 = 1000;
-pub const INVALID_DATA_CLOSE: u16 = 1007;
-pub const POLICY_CLOSE: u16 = 1008;
-pub const INTERNAL_ERROR_CLOSE: u16 = 1011;
+pub use session::*;
 
 pub struct WebSocket {
     inner: ws::WebSocket,
@@ -15,23 +13,23 @@ pub struct WebSocket {
 impl WebSocket {
     pub fn close_with(
         &mut self,
-        code: u16,
+        code: atp::CloseCode,
         reason: impl std::fmt::Display,
     ) -> std::pin::Pin<Box<impl Future<Output = Result<(), atp::Error>>>> {
         let reason = reason.to_string();
 
         Box::pin(async move {
             while let Some(message) = self.queue.pop_front() {
-                self.inner.send(message).await.map_err(socket_error)?;
+                self.inner.send(message).await.map_err(atp::error::socket)?;
             }
 
             self.inner
                 .send(ws::Message::Close(Some(ws::CloseFrame {
-                    code,
+                    code: code as u16,
                     reason: reason.into(),
                 })))
                 .await
-                .map_err(socket_error)
+                .map_err(atp::error::socket)
         })
     }
 }
@@ -48,14 +46,14 @@ impl atp::Socket for WebSocket {
                 Some(Ok(ws::Message::Binary(bytes))) => Ok(atp::Output::Frame(serde_json::from_slice(&bytes)?)),
                 Some(Ok(ws::Message::Ping(_) | ws::Message::Pong(_))) => Ok(atp::Output::Continue),
                 Some(Ok(ws::Message::Close(Some(frame)))) => Ok(atp::Output::Close {
-                    code: frame.code,
+                    code: frame.code.try_into()?,
                     message: (!frame.reason.is_empty()).then(|| frame.reason.to_string()),
                 }),
                 Some(Ok(ws::Message::Close(None))) | None => Ok(atp::Output::Close {
-                    code: NORMAL_CLOSE,
+                    code: atp::CloseCode::Normal,
                     message: None,
                 }),
-                Some(Err(error)) => Err(socket_error(error)),
+                Some(Err(error)) => Err(atp::error::socket(error)),
             }
         })
     }
@@ -78,7 +76,7 @@ impl atp::Socket for WebSocket {
             let mut count = 0;
 
             while let Some(message) = self.queue.pop_front() {
-                self.inner.send(message).await.map_err(socket_error)?;
+                self.inner.send(message).await.map_err(atp::error::socket)?;
                 count += 1;
             }
 
@@ -89,16 +87,16 @@ impl atp::Socket for WebSocket {
     fn close(&mut self) -> std::pin::Pin<Box<impl Future<Output = Result<(), Self::Error>>>> {
         Box::pin(async move {
             while let Some(message) = self.queue.pop_front() {
-                self.inner.send(message).await.map_err(socket_error)?;
+                self.inner.send(message).await.map_err(atp::error::socket)?;
             }
 
             self.inner
                 .send(ws::Message::Close(Some(ws::CloseFrame {
-                    code: NORMAL_CLOSE,
+                    code: atp::CloseCode::Normal as u16,
                     reason: "normal closure".into(),
                 })))
                 .await
-                .map_err(socket_error)
+                .map_err(atp::error::socket)
         })
     }
 }
@@ -110,8 +108,4 @@ impl From<ws::WebSocket> for WebSocket {
             queue: VecDeque::new(),
         }
     }
-}
-
-fn socket_error(error: impl std::fmt::Display) -> atp::Error {
-    atp::Error::Socket(error.to_string())
 }

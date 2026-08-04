@@ -4,7 +4,11 @@ pub fn protocol(message: impl std::fmt::Display) -> Error {
     Error::Protocol(message.to_string())
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub fn socket(message: impl std::fmt::Display) -> Error {
+    Error::Socket(message.to_string())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "code", content = "message")]
 pub enum Error {
     Protocol(String),

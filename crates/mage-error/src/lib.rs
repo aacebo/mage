@@ -52,6 +52,14 @@ pub fn ai(message: impl std::fmt::Display) -> Error {
     new("ai", message)
 }
 
+pub fn atp(message: impl std::fmt::Display) -> Error {
+    new("atp", message)
+}
+
+pub fn internal(message: impl std::fmt::Display) -> Error {
+    new("internal", message)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Error {
     trace_id: Option<String>,
@@ -115,6 +123,13 @@ impl From<serde_valid::validation::Errors> for Error {
 impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
         io(value)
+    }
+}
+
+#[cfg(feature = "web")]
+impl From<atp::Error> for Error {
+    fn from(value: atp::Error) -> Self {
+        atp(value)
     }
 }
 

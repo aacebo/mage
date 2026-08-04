@@ -1,6 +1,44 @@
-pub mod events;
+mod events;
 
-pub use events::ServerEvent;
+pub use events::*;
+
+use crate::{error, wire};
+
+pub trait Observe {
+    fn on_frame(
+        &self,
+        frame: wire::Frame<ServerFrame>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>> + '_>> {
+        Box::pin(async {
+            match frame {
+                wire::Frame::Notification(v) => {
+                    let body = v.body.clone();
+                    self.on_event(v.cast_with(body.try_event()?.clone())).await
+                }
+                wire::Frame::Request(v) => Err(error::protocol(format!("unsupported client request => {v:#?}"))),
+                wire::Frame::Response(v) => Err(error::protocol(format!("unsupported client response => {v:#?}"))),
+            }
+        })
+    }
+
+    fn on_event(
+        &self,
+        event: wire::Notification<ServerEvent>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>> + '_>> {
+        Box::pin(async {
+            match event.body.clone() {
+                ServerEvent::Message(e) => self.on_message_event(event.cast_with(e)).await,
+            }
+        })
+    }
+
+    fn on_message_event(
+        &self,
+        _event: wire::Notification<MessageEvent>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>> + '_>> {
+        Box::pin(async { Ok(()) })
+    }
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]

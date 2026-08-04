@@ -18,6 +18,16 @@ impl Request {
     }
 }
 
+impl<T> Request<T> {
+    pub fn cast_with<V>(self, params: V) -> Request<V> {
+        Request {
+            id: self.id,
+            method: self.method,
+            params,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{Error, client, wire};

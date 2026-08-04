@@ -72,6 +72,16 @@ impl Frame {
     }
 }
 
+impl<T> Frame<T> {
+    pub fn cast_with<V>(self, data: V) -> Frame<V> {
+        match self {
+            Self::Request(v) => v.cast_with(data).into(),
+            Self::Response(v) => v.cast_with(Some(data)).into(),
+            Self::Notification(v) => v.cast_with(data).into(),
+        }
+    }
+}
+
 impl<T> From<Request<T>> for Frame<T> {
     fn from(value: Request<T>) -> Self {
         Self::Request(value)

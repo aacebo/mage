@@ -1,8 +1,110 @@
-pub mod events;
-pub mod params;
+mod events;
+mod params;
 
-pub use events::ClientEvent;
-pub use params::ClientParams;
+pub use events::*;
+pub use params::*;
+
+use crate::{error, wire};
+
+pub trait Observe {
+    fn on_frame(
+        &self,
+        frame: wire::Frame<ClientFrame>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>> + '_>> {
+        Box::pin(async {
+            match frame {
+                wire::Frame::Notification(v) => {
+                    let body = v.body.clone();
+                    self.on_event(v.cast_with(body.try_event()?.clone())).await
+                }
+                wire::Frame::Request(v) => {
+                    let params = v.params.clone();
+                    self.on_request(v.cast_with(params.try_params()?.clone())).await
+                }
+                wire::Frame::Response(_) => Err(error::protocol("unsupported client response")),
+            }
+        })
+    }
+
+    fn on_event(
+        &self,
+        event: wire::Notification<ClientEvent>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>> + '_>> {
+        Box::pin(async move {
+            match event.body.clone() {
+                ClientEvent::Stream(e) => self.on_stream_event(event.cast_with(e)).await,
+            }
+        })
+    }
+
+    fn on_request(
+        &self,
+        req: wire::Request<ClientParams>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>> + '_>> {
+        Box::pin(async move {
+            match req.params.clone() {
+                ClientParams::Connect(params) => self.on_connect_request(req.cast_with(params)).await,
+                ClientParams::Message(params) => self.on_message_request(req.cast_with(params)).await,
+            }
+        })
+    }
+
+    fn on_connect_request(
+        &self,
+        _req: wire::Request<ConnectParams>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>>>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn on_message_request(
+        &self,
+        _req: wire::Request<MessageParams>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>>>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn on_stream_event(
+        &self,
+        event: wire::Notification<StreamEvent>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>> + '_>> {
+        Box::pin(async {
+            match event.body.clone() {
+                StreamEvent::Open(e) => self.on_stream_open_event(event.cast_with(e)).await,
+                StreamEvent::Close(e) => self.on_stream_close_event(event.cast_with(e)).await,
+                StreamEvent::Status(e) => self.on_stream_status_event(event.cast_with(e)).await,
+                StreamEvent::Text(e) => self.on_stream_text_event(event.cast_with(e)).await,
+            }
+        })
+    }
+
+    fn on_stream_open_event(
+        &self,
+        _event: wire::Notification<StreamOpenEvent>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>>>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn on_stream_close_event(
+        &self,
+        _event: wire::Notification<StreamCloseEvent>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>>>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn on_stream_status_event(
+        &self,
+        _event: wire::Notification<StreamStatusEvent>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>>>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn on_stream_text_event(
+        &self,
+        _event: wire::Notification<StreamTextEvent>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>>>> {
+        Box::pin(async { Ok(()) })
+    }
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]

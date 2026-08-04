@@ -2592,6 +2592,7 @@ dependencies = [
 name = "mage-error"
 version = "0.0.0"
 dependencies = [
+ "atp",
  "axum",
  "lapin",
  "reqwest 0.13.4",

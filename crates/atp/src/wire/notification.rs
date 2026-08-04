@@ -19,6 +19,16 @@ impl Notification {
     }
 }
 
+impl<T> Notification<T> {
+    pub fn cast_with<V>(self, body: V) -> Notification<V> {
+        Notification {
+            task_id: self.task_id,
+            name: self.name,
+            body,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{Error, client, wire};

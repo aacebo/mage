@@ -30,6 +30,13 @@ impl<T> Response<T> {
             },
         }
     }
+
+    pub fn cast_with<V>(self, result: Option<V>) -> Response<V> {
+        match self {
+            Self::Err { id, error } => Response::Err { id, error },
+            Self::Ok { id, result: _ } => Response::Ok { id, result },
+        }
+    }
 }
 
 impl Response {
@@ -96,6 +103,12 @@ impl Error {
             code: Self::INTERNAL,
             message: message.to_string(),
         }
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} => {}", self.code, self.message)
     }
 }
 

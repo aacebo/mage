@@ -12,7 +12,7 @@ workspace = true
 
 [features]
 default = []
-web = ["dep:axum"]
+web = ["dep:axum", "dep:atp"]
 ai = ["dep:reqwest", "dep:url"]
 amqp = ["dep:lapin"]
 storage = ["dep:sqlx"]
@@ -22,6 +22,7 @@ serde.workspace = true
 serde_json.workspace = true
 serde_valid.workspace = true
 
+atp = { workspace = true, optional = true }
 axum = { workspace = true, features = ["json"], optional = true }
 lapin = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
