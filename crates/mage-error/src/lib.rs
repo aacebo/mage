@@ -129,7 +129,11 @@ impl From<std::io::Error> for Error {
 #[cfg(feature = "web")]
 impl From<atp::Error> for Error {
     fn from(value: atp::Error) -> Self {
-        atp(value)
+        match value.code {
+            atp::Error::PARSE => new("atp_parse", value),
+            atp::Error::INTERNAL => new("atp_internal", value),
+            _ => atp(value),
+        }
     }
 }
 
@@ -203,5 +207,17 @@ mod tests {
             let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
             assert_eq!(serde_json::from_slice::<serde_json::Value>(&body).unwrap(), expected);
         }
+    }
+
+    #[test]
+    fn atp_conversion_preserves_close_relevant_categories() {
+        let parse = super::Error::from(atp::error::parse("invalid JSON"));
+        assert_eq!(parse.name(), "atp_parse");
+
+        let request = super::Error::from(atp::error::invalid_request("invalid frame"));
+        assert_eq!(request.name(), "atp");
+
+        let internal = super::Error::from(atp::error::internal("encoding failed"));
+        assert_eq!(internal.name(), "atp_internal");
     }
 }

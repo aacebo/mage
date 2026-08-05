@@ -6,7 +6,7 @@ pub struct Request<T = serde_json::Value> {
 }
 
 impl Request {
-    pub fn try_cast_into<T>(self) -> Result<Request<T>, Box<dyn std::error::Error>>
+    pub fn try_cast_into<T>(self) -> crate::Result<Request<T>>
     where
         T: for<'a> serde::Deserialize<'a>,
     {
@@ -53,11 +53,12 @@ mod tests {
         }))?;
 
         let value: wire::Request<client::ClientParams> = frame.try_cast_into()?;
+        let params = value.params.clone().try_into_connect()?;
         debug_assert_eq!(
-            value.params.try_connect()?.id,
+            params.id,
             "019fb92c-e616-716f-9768-16c4753fe9d9".parse::<uuid::Uuid>().unwrap()
         );
-        debug_assert_eq!(value.params.try_connect()?.name, "test");
+        debug_assert_eq!(params.name, "test");
         let json = serde_json::to_string(&value)?;
         debug_assert_eq!(
             json,

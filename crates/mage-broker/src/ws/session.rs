@@ -17,12 +17,12 @@ impl Session {
         self.id
     }
 
-    pub fn send(&self, message: impl Into<ws::Message>) -> Result<(), atp::Error> {
+    pub fn send(&self, message: impl Into<ws::Message>) -> Result<(), Error> {
         self.sender
             .upgrade()
-            .ok_or(atp::error::socket("inactive socket"))?
+            .ok_or_else(|| mage_error::internal("inactive WebSocket"))?
             .send(message.into())
-            .map_err(atp::error::socket)
+            .map_err(mage_error::internal)
     }
 }
 
@@ -83,7 +83,7 @@ impl Pool {
             Some(v) => v,
         };
 
-        sender.send(message.into()).map_err(mage_error::atp)?;
+        sender.send(message.into()).map_err(mage_error::internal)?;
         Ok(true)
     }
 }

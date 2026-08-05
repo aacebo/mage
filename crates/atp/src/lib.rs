@@ -6,14 +6,16 @@ pub mod wire;
 
 pub use error::Error;
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 pub trait Socket {
     type Error;
 
-    fn read<T>(&mut self) -> std::pin::Pin<Box<impl Future<Output = Result<Output<T>, Self::Error>>>>
+    fn read<T>(&mut self) -> std::pin::Pin<Box<impl Future<Output = std::result::Result<Output<T>, Self::Error>>>>
     where
         T: for<'a> serde::Deserialize<'a>;
 
-    fn write<T>(&mut self, item: T) -> std::pin::Pin<Box<impl Future<Output = Result<(), Self::Error>>>>
+    fn write<T>(&mut self, item: T) -> std::pin::Pin<Box<impl Future<Output = std::result::Result<(), Self::Error>>>>
     where
         T: serde::Serialize;
 
@@ -21,7 +23,7 @@ pub trait Socket {
         &mut self,
         code: CloseCode,
         reason: Option<impl std::fmt::Display>,
-    ) -> std::pin::Pin<Box<impl Future<Output = Result<(), Self::Error>>>>;
+    ) -> std::pin::Pin<Box<impl Future<Output = std::result::Result<(), Self::Error>>>>;
 }
 
 #[derive(Debug, Clone)]
@@ -70,13 +72,13 @@ impl CloseCode {
 impl TryFrom<u16> for CloseCode {
     type Error = Error;
 
-    fn try_from(value: u16) -> Result<Self, Self::Error> {
+    fn try_from(value: u16) -> std::result::Result<Self, Self::Error> {
         match value {
             1000 => Ok(Self::Normal),
             1007 => Ok(Self::InvalidData),
             1008 => Ok(Self::Policy),
             1011 => Ok(Self::InternalError),
-            v => Err(error::protocol(format!("invalid close code `{v}`"))),
+            v => Err(error::invalid_request(format!("invalid close code `{v}`"))),
         }
     }
 }
@@ -107,5 +109,11 @@ mod tests {
         };
         assert_eq!(Ok(code), CloseCode::try_from(1008));
         assert_eq!(message.as_deref(), Some("policy violation"));
+    }
+
+    #[test]
+    fn invalid_close_code_is_an_invalid_request() {
+        let error = CloseCode::try_from(999).unwrap_err();
+        assert_eq!(error.code, crate::Error::INVALID_REQUEST);
     }
 }

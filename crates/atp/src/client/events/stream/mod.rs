@@ -10,7 +10,7 @@ pub use open::*;
 pub use status::*;
 pub use text::*;
 
-use crate::{Error, error};
+use crate::error;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
 #[serde(untagged)]
@@ -49,31 +49,43 @@ impl StreamEvent {
         }
     }
 
-    pub fn try_into_open(self) -> Result<StreamOpenEvent, Error> {
+    pub fn try_into_open(self) -> crate::Result<StreamOpenEvent> {
         match self {
             Self::Open(v) => Ok(v),
-            v => Err(error::invalid_request(format!("expected `stream.open`, received `{}`", v.name())).into()),
+            v => Err(error::invalid_request(format!(
+                "expected `stream.open`, received `{}`",
+                v.name()
+            ))),
         }
     }
 
-    pub fn try_into_status(self) -> Result<StreamStatusEvent, Error> {
+    pub fn try_into_status(self) -> crate::Result<StreamStatusEvent> {
         match self {
             Self::Status(v) => Ok(v),
-            v => Err(error::invalid_request(format!("expected `stream.status`, received `{}`", v.name())).into()),
+            v => Err(error::invalid_request(format!(
+                "expected `stream.status`, received `{}`",
+                v.name()
+            ))),
         }
     }
 
-    pub fn try_into_text(self) -> Result<StreamTextEvent, Error> {
+    pub fn try_into_text(self) -> crate::Result<StreamTextEvent> {
         match self {
             Self::Text(v) => Ok(v),
-            v => Err(error::invalid_request(format!("expected `stream.text`, received `{}`", v.name())).into()),
+            v => Err(error::invalid_request(format!(
+                "expected `stream.text`, received `{}`",
+                v.name()
+            ))),
         }
     }
 
-    pub fn try_into_close(self) -> Result<StreamCloseEvent, Error> {
+    pub fn try_into_close(self) -> crate::Result<StreamCloseEvent> {
         match self {
             Self::Close(v) => Ok(v),
-            v => Err(error::invalid_request(format!("expected `stream.close`, received `{}`", v.name())).into()),
+            v => Err(error::invalid_request(format!(
+                "expected `stream.close`, received `{}`",
+                v.name()
+            ))),
         }
     }
 }

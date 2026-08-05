@@ -7,7 +7,7 @@ pub use params::*;
 use crate::wire;
 
 pub trait Observe: Send {
-    type Error;
+    type Error: From<crate::Error> + Send;
 
     fn on_frame(
         &mut self,
@@ -23,7 +23,7 @@ pub trait Observe: Send {
                     let params = v.params.clone();
                     self.on_request(v.cast_with(params.try_into_params()?)).await
                 }
-                _ => Ok(()),
+                _ => Err(crate::error::invalid_request("expected client request or notification, received response").into()),
             }
         })
     }
@@ -116,17 +116,17 @@ pub enum ClientFrame {
 }
 
 impl ClientFrame {
-    pub fn try_into_event(self) -> Result<ClientEvent, Box<dyn std::error::Error>> {
+    pub fn try_into_event(self) -> crate::Result<ClientEvent> {
         match self {
             Self::Event(v) => Ok(v),
-            _ => Err(crate::error::invalid_request("expected event").into()),
+            _ => Err(crate::error::invalid_request("expected event")),
         }
     }
 
-    pub fn try_into_params(self) -> Result<ClientParams, Box<dyn std::error::Error>> {
+    pub fn try_into_params(self) -> crate::Result<ClientParams> {
         match self {
             Self::Params(v) => Ok(v),
-            _ => Err(crate::error::invalid_request("expected request").into()),
+            _ => Err(crate::error::invalid_request("expected request")),
         }
     }
 }
@@ -171,6 +171,19 @@ mod tests {
         statuses: usize,
     }
 
+    struct Rejecting;
+
+    impl Observe for Rejecting {
+        type Error = crate::Error;
+
+        fn on_connect_request(
+            &mut self,
+            _req: wire::Request<ConnectParams>,
+        ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
+            Box::pin(async { Err(crate::error::internal("handler failed")) })
+        }
+    }
+
     impl Observe for Recorder {
         type Error = crate::Error;
 
@@ -208,7 +221,7 @@ mod tests {
 
         let json = serde_json::to_string(&frame).unwrap();
         let decoded: ClientFrame = serde_json::from_str(&json).unwrap();
-        assert_eq!(decoded.try_params().unwrap().try_connect().unwrap().id, agent_id);
+        assert_eq!(decoded.try_into_params().unwrap().try_into_connect().unwrap().id, agent_id);
     }
 
     #[test]
@@ -244,5 +257,31 @@ mod tests {
         assert_send(&future);
         block_on(future).unwrap();
         assert_eq!(observer.statuses, 1);
+    }
+
+    #[test]
+    fn observer_propagates_handler_errors_and_rejects_responses() {
+        let connect = wire::Request {
+            id: uuid::Uuid::now_v7(),
+            method: "connect".to_string(),
+            params: ClientFrame::from(ClientParams::from(ConnectParams {
+                id: uuid::Uuid::now_v7(),
+                name: "test".to_string(),
+                description: "test agent".to_string(),
+                secret: "secret".to_string(),
+                skills: vec![],
+            })),
+        };
+
+        let mut observer = Rejecting;
+        let error = block_on(observer.on_frame(connect.into())).unwrap_err();
+        assert_eq!(error, crate::error::internal("handler failed"));
+
+        let response = wire::Response::<ClientFrame>::Ok {
+            id: uuid::Uuid::now_v7(),
+            result: None,
+        };
+        let error = block_on(observer.on_frame(response.into())).unwrap_err();
+        assert_eq!(error.code, crate::Error::INVALID_REQUEST);
     }
 }

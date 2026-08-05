@@ -5,15 +5,17 @@ pub use events::*;
 use crate::{error, wire};
 
 pub trait Observe: Send {
+    type Error: From<crate::Error> + Send;
+
     fn on_frame(
         &mut self,
         frame: wire::Frame<ServerFrame>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Box<dyn std::error::Error>>> + Send + '_>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async {
             match frame {
                 wire::Frame::Notification(v) => {
                     let body = v.body.clone();
-                    self.on_event(v.cast_with(body.try_event()?.clone())).await
+                    self.on_event(v.cast_with(body.try_into_event()?)).await
                 }
                 _ => Err(error::invalid_request("expected notification, received request or response").into()),
             }
@@ -23,7 +25,7 @@ pub trait Observe: Send {
     fn on_event(
         &mut self,
         event: wire::Notification<ServerEvent>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Box<dyn std::error::Error>>> + Send + '_>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async {
             match event.body.clone() {
                 ServerEvent::Message(e) => self.on_message_event(event.cast_with(e)).await,
@@ -34,7 +36,7 @@ pub trait Observe: Send {
     fn on_message_event(
         &mut self,
         _event: wire::Notification<MessageEvent>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Box<dyn std::error::Error>>> + Send + '_>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async { Ok(()) })
     }
 }
@@ -46,7 +48,7 @@ pub enum ServerFrame {
 }
 
 impl ServerFrame {
-    pub fn try_event(&self) -> Result<&ServerEvent, crate::Error> {
+    pub fn try_into_event(self) -> crate::Result<ServerEvent> {
         match self {
             Self::Event(v) => Ok(v),
         }
@@ -87,11 +89,26 @@ mod tests {
         messages: usize,
     }
 
-    impl Observe for Recorder {
+    struct Rejecting;
+
+    impl Observe for Rejecting {
+        type Error = crate::Error;
+
         fn on_message_event(
             &mut self,
             _event: wire::Notification<MessageEvent>,
-        ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), crate::Error>> + Send + '_>> {
+        ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
+            Box::pin(async { Err(crate::error::internal("handler failed")) })
+        }
+    }
+
+    impl Observe for Recorder {
+        type Error = crate::Error;
+
+        fn on_message_event(
+            &mut self,
+            _event: wire::Notification<MessageEvent>,
+        ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
             Box::pin(async move {
                 self.messages += 1;
                 Ok(())
@@ -130,7 +147,7 @@ mod tests {
 
         let json = serde_json::to_string(&frame).unwrap();
         let decoded: ServerFrame = serde_json::from_str(&json).unwrap();
-        assert_eq!(decoded.try_event().unwrap().try_message().unwrap().id, message_id);
+        assert_eq!(decoded.try_into_event().unwrap().try_into_message().unwrap().id, message_id);
     }
 
     #[test]
@@ -146,5 +163,31 @@ mod tests {
         assert_send(&future);
         block_on(future).unwrap();
         assert_eq!(observer.messages, 1);
+    }
+
+    #[test]
+    fn observer_rejects_non_notification_frames() {
+        let mut observer = Recorder::default();
+        let request = wire::Request {
+            id: uuid::Uuid::now_v7(),
+            method: "message".to_string(),
+            params: ServerFrame::from(ServerEvent::from(message_event())),
+        };
+
+        let error = block_on(observer.on_frame(request.into())).unwrap_err();
+        assert_eq!(error.code, crate::Error::INVALID_REQUEST);
+    }
+
+    #[test]
+    fn observer_propagates_handler_errors() {
+        let notification = wire::Notification {
+            task_id: Some(uuid::Uuid::now_v7()),
+            name: "message".to_string(),
+            body: ServerFrame::from(ServerEvent::from(message_event())),
+        };
+
+        let mut observer = Rejecting;
+        let error = block_on(observer.on_frame(notification.into())).unwrap_err();
+        assert_eq!(error, crate::error::internal("handler failed"));
     }
 }

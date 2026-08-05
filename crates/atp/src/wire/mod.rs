@@ -29,24 +29,24 @@ impl<T> Frame<T> {
         matches!(self, Self::Notification(_))
     }
 
-    pub fn try_into_request(self) -> Result<Request<T>, Box<dyn std::error::Error>> {
+    pub fn try_into_request(self) -> crate::Result<Request<T>> {
         match self {
             Self::Request(v) => Ok(v),
-            _ => Err(error::invalid_request("expected request").into()),
+            _ => Err(error::invalid_request("expected request")),
         }
     }
 
-    pub fn try_into_response(self) -> Result<Response<T>, Box<dyn std::error::Error>> {
+    pub fn try_into_response(self) -> crate::Result<Response<T>> {
         match self {
             Self::Response(v) => Ok(v),
-            _ => Err(error::invalid_request("expected response").into()),
+            _ => Err(error::invalid_request("expected response")),
         }
     }
 
-    pub fn try_into_notification(self) -> Result<Notification<T>, Box<dyn std::error::Error>> {
+    pub fn try_into_notification(self) -> crate::Result<Notification<T>> {
         match self {
             Self::Notification(v) => Ok(v),
-            _ => Err(error::invalid_request("expected notification").into()),
+            _ => Err(error::invalid_request("expected notification")),
         }
     }
 
@@ -60,7 +60,7 @@ impl<T> Frame<T> {
 }
 
 impl Frame {
-    pub fn try_cast_into<T>(self) -> Result<Frame<T>, Box<dyn std::error::Error>>
+    pub fn try_cast_into<T>(self) -> crate::Result<Frame<T>>
     where
         T: for<'a> serde::Deserialize<'a>,
     {
@@ -105,6 +105,25 @@ mod tests {
     use crate::{Error, client, wire};
 
     #[test]
+    fn wrong_frame_kind_and_invalid_cast_are_typed_errors() {
+        let notification = wire::Notification {
+            task_id: None,
+            name: "event".to_string(),
+            body: serde_json::Value::Null,
+        };
+        let error = wire::Frame::from(notification).try_into_request().unwrap_err();
+        assert_eq!(error.code, Error::INVALID_REQUEST);
+
+        let request = wire::Request {
+            id: uuid::Uuid::now_v7(),
+            method: "connect".to_string(),
+            params: serde_json::json!(42),
+        };
+        let error = request.try_cast_into::<uuid::Uuid>().unwrap_err();
+        assert_eq!(error.code, Error::INVALID_REQUEST);
+    }
+
+    #[test]
     fn notification() -> Result<(), Error> {
         let frame: wire::Frame = serde_json::from_value(serde_json::json!({
             "name": "stream.status",
@@ -116,8 +135,8 @@ mod tests {
             }
         }))?;
 
-        let value: wire::Notification<client::ClientEvent> = frame.try_notification()?.clone().try_cast_into()?;
-        let event = value.body.try_stream()?;
+        let value: wire::Notification<client::ClientEvent> = frame.try_into_notification()?.try_cast_into()?;
+        let event = value.body.clone().try_into_stream()?;
         debug_assert_eq!(event.name(), "stream.status");
         let json = serde_json::to_string(&value)?;
         debug_assert_eq!(
@@ -149,12 +168,13 @@ mod tests {
             }
         }))?;
 
-        let value: wire::Request<client::ClientParams> = frame.try_request()?.clone().try_cast_into()?;
+        let value: wire::Request<client::ClientParams> = frame.try_into_request()?.try_cast_into()?;
+        let params = value.params.clone().try_into_connect()?;
         debug_assert_eq!(
-            value.params.try_connect()?.id,
+            params.id,
             "019fb92c-e616-716f-9768-16c4753fe9d9".parse::<uuid::Uuid>().unwrap()
         );
-        debug_assert_eq!(value.params.try_connect()?.name, "test");
+        debug_assert_eq!(params.name, "test");
         let json = serde_json::to_string(&value)?;
         debug_assert_eq!(
             json,
@@ -178,7 +198,7 @@ mod tests {
                 }
             }))?;
 
-            let error = frame.try_response()?.result().unwrap_err();
+            let error = frame.clone().try_into_response()?.result().unwrap_err().clone();
             debug_assert_eq!(error.code, -200, "{error:#?}");
             debug_assert_eq!(error.message, "??", "{error:#?}");
             let json = serde_json::to_string(&frame)?;
@@ -197,8 +217,8 @@ mod tests {
                 "result": 200
             }))?;
 
-            let res = frame.try_response()?.result().unwrap();
-            debug_assert_eq!(res.cloned(), Some(serde_json::to_value(200)?), "{frame:#?}");
+            let res = frame.clone().try_into_response()?.result().unwrap().cloned();
+            debug_assert_eq!(res, Some(serde_json::to_value(200)?), "{frame:#?}");
             let json = serde_json::to_string(&frame)?;
             debug_assert_eq!(
                 json, r#"{"id":"019fb92c-e616-716f-9768-16c4753fe9d8","result":200}"#,

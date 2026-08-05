@@ -24,17 +24,23 @@ impl ClientParams {
         }
     }
 
-    pub fn try_into_connect(self) -> Result<ConnectParams, Box<dyn std::error::Error>> {
+    pub fn try_into_connect(self) -> crate::Result<ConnectParams> {
         match self {
             Self::Connect(v) => Ok(v),
-            v => Err(crate::error::invalid_request(format!("expected `connect`, received `{}`", v.method())).into()),
+            v => Err(crate::error::invalid_request(format!(
+                "expected `connect`, received `{}`",
+                v.method()
+            ))),
         }
     }
 
-    pub fn try_into_message(self) -> Result<MessageParams, Box<dyn std::error::Error>> {
+    pub fn try_into_message(self) -> crate::Result<MessageParams> {
         match self {
             Self::Message(v) => Ok(v),
-            v => Err(crate::error::invalid_request(format!("expected `message`, received `{}`", v.method())).into()),
+            v => Err(crate::error::invalid_request(format!(
+                "expected `message`, received `{}`",
+                v.method()
+            ))),
         }
     }
 }

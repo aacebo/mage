@@ -3,12 +3,16 @@ pub mod session;
 use axum::extract::ws;
 pub use session::*;
 
+fn serialize<T: serde::Serialize>(item: &T) -> Result<Vec<u8>, mage_error::Error> {
+    serde_json::to_vec(item).map_err(|error| mage_error::new("atp_internal", error))
+}
+
 pub struct WebSocket {
     inner: ws::WebSocket,
 }
 
 impl atp::Socket for WebSocket {
-    type Error = atp::Error;
+    type Error = mage_error::Error;
 
     fn read<T>(&mut self) -> std::pin::Pin<Box<impl Future<Output = Result<atp::Output<T>, Self::Error>>>>
     where
@@ -27,7 +31,7 @@ impl atp::Socket for WebSocket {
                     code: atp::CloseCode::Normal,
                     message: None,
                 }),
-                Some(Err(error)) => Err(atp::error::socket(error)),
+                Some(Err(error)) => Err(mage_error::internal(error)),
             }
         })
     }
@@ -37,11 +41,11 @@ impl atp::Socket for WebSocket {
         T: serde::Serialize,
     {
         Box::pin(async move {
-            let bytes = serde_json::to_vec(&item)?;
+            let bytes = serialize(&item)?;
             self.inner
                 .send(ws::Message::Binary(bytes.into()))
                 .await
-                .map_err(atp::error::socket)?;
+                .map_err(mage_error::internal)?;
             Ok(())
         })
     }
@@ -58,7 +62,7 @@ impl atp::Socket for WebSocket {
                     reason: reason.map_or("normal closure".to_string(), |v| v.to_string()).into(),
                 })))
                 .await
-                .map_err(atp::error::socket)
+                .map_err(mage_error::internal)
         })
     }
 }

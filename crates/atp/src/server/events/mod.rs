@@ -2,8 +2,6 @@ mod message;
 
 pub use message::MessageEvent;
 
-use crate::{Error, error};
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum ServerEvent {
@@ -11,7 +9,7 @@ pub enum ServerEvent {
 }
 
 impl ServerEvent {
-    pub fn try_message(&self) -> Result<&MessageEvent, Error> {
+    pub fn try_into_message(self) -> crate::Result<MessageEvent> {
         match self {
             Self::Message(v) => Ok(v),
         }

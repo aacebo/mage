@@ -42,7 +42,7 @@ impl<T> Response<T> {
 }
 
 impl Response {
-    pub fn try_cast_into<T>(self) -> Result<Response<T>, Box<dyn std::error::Error>>
+    pub fn try_cast_into<T>(self) -> crate::Result<Response<T>>
     where
         T: for<'a> serde::Deserialize<'a>,
     {

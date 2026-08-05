@@ -62,15 +62,7 @@ async fn run(ctx: RequestContext, socket: ws::WebSocket) {
         }
         Ok(Err(error)) => {
             tracing::warn!(%error, "failed to read ATP connect request");
-
-            let (code, reason) = match error {
-                atp::Error::Json(_) => (atp::CloseCode::InvalidData, "invalid ATP JSON"),
-                atp::Error::Protocol(_) => (atp::CloseCode::Policy, "invalid ATP frame"),
-                atp::Error::Socket(_) => (atp::CloseCode::InternalError, "WebSocket transport failed"),
-            };
-
-            observer.terminal = true;
-            let _ = observer.socket.close(code, Some(reason)).await;
+            observer.close_for_error(&error).await;
         }
         Ok(Ok(atp::Output::Close { code, message })) => {
             tracing::debug!(%code, ?message, "agent requested connection close during handshake");
@@ -78,15 +70,7 @@ async fn run(ctx: RequestContext, socket: ws::WebSocket) {
         Ok(Ok(atp::Output::Frame(frame))) => {
             if let Err(error) = observer.on_frame(frame).await {
                 tracing::warn!(%error, "invalid ATP connect frame");
-
-                let (code, reason) = match error {
-                    atp::Error::Json(_) => (atp::CloseCode::InvalidData, "invalid ATP JSON"),
-                    atp::Error::Protocol(_) => (atp::CloseCode::Policy, "invalid ATP frame"),
-                    atp::Error::Socket(_) => (atp::CloseCode::InternalError, "WebSocket transport failed"),
-                };
-
-                observer.terminal = true;
-                let _ = observer.socket.close(code, Some(reason)).await;
+                observer.close_for_error(&error).await;
             } else if observer.actor.is_none() && !observer.terminal {
                 observer.terminal = true;
                 let _ = observer
@@ -108,28 +92,12 @@ async fn run(ctx: RequestContext, socket: ws::WebSocket) {
             Ok(atp::Output::Frame(frame)) => {
                 if let Err(error) = observer.on_frame(frame).await {
                     tracing::warn!(%error, "failed to handle ATP frame");
-
-                    let (code, reason) = match error {
-                        atp::Error::Json(_) => (atp::CloseCode::InvalidData, "invalid ATP JSON"),
-                        atp::Error::Protocol(_) => (atp::CloseCode::Policy, "invalid ATP frame"),
-                        atp::Error::Socket(_) => (atp::CloseCode::InternalError, "WebSocket transport failed"),
-                    };
-
-                    observer.terminal = true;
-                    let _ = observer.socket.close(code, Some(reason)).await;
+                    observer.close_for_error(&error).await;
                 }
             }
             Err(error) => {
                 tracing::warn!(%error, "agent WebSocket stream failed");
-
-                let (code, reason) = match error {
-                    atp::Error::Json(_) => (atp::CloseCode::InvalidData, "invalid ATP JSON"),
-                    atp::Error::Protocol(_) => (atp::CloseCode::Policy, "invalid ATP frame"),
-                    atp::Error::Socket(_) => (atp::CloseCode::InternalError, "WebSocket transport failed"),
-                };
-
-                observer.terminal = true;
-                let _ = observer.socket.close(code, Some(reason)).await;
+                observer.close_for_error(&error).await;
             }
         }
     }
@@ -166,16 +134,31 @@ struct AgentObserver {
     terminal: bool,
 }
 
+impl AgentObserver {
+    async fn close_for_error(&mut self, error: &mage_error::Error) {
+        let code = match error.name() {
+            "json" | "parse" | "atp_parse" => atp::CloseCode::InvalidData,
+            "atp" | "bad_request" => atp::CloseCode::Policy,
+            _ => atp::CloseCode::InternalError,
+        };
+
+        self.terminal = true;
+        let _ = self.socket.close(code, Some(code.as_str())).await;
+    }
+}
+
 impl atp::client::Observe for AgentObserver {
+    type Error = mage_error::Error;
+
     fn on_connect_request(
         &mut self,
         req: atp::wire::Request<atp::client::ConnectParams>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), atp::Error>> + Send + '_>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async move {
             if self.actor.is_some() {
                 let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                     id: req.id,
-                    error: atp::wire::Error::invalid_request("agent is already connected"),
+                    error: atp::error::invalid_request("agent is already connected"),
                 };
                 self.socket.write(response).await?;
                 return Ok(());
@@ -184,7 +167,7 @@ impl atp::client::Observe for AgentObserver {
             if req.method != "connect" {
                 let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                     id: req.id,
-                    error: atp::wire::Error::method_not_found(&req.method),
+                    error: atp::error::method_not_found(&req.method),
                 };
                 self.socket.write(response).await?;
                 self.terminal = true;
@@ -197,7 +180,7 @@ impl atp::client::Observe for AgentObserver {
             if let Err(error) = req.params.validate() {
                 let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                     id: req.id,
-                    error: atp::wire::Error::invalid_params(error),
+                    error: atp::error::invalid_params(error),
                 };
                 self.socket.write(response).await?;
                 self.terminal = true;
@@ -276,7 +259,7 @@ impl atp::client::Observe for AgentObserver {
                     tracing::warn!("agent authentication rejected");
                     let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                         id: req.id,
-                        error: atp::wire::Error::invalid_request(INVALID_CREDENTIALS),
+                        error: atp::error::invalid_request(INVALID_CREDENTIALS),
                     };
                     self.socket.write(response).await?;
                     self.terminal = true;
@@ -287,7 +270,7 @@ impl atp::client::Observe for AgentObserver {
                     tracing::error!(%error, "failed to establish agent session");
                     let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                         id: req.id,
-                        error: atp::wire::Error::internal("failed to establish agent session"),
+                        error: atp::error::internal("failed to establish agent session"),
                     };
                     self.socket.write(response).await?;
                     self.terminal = true;
@@ -316,12 +299,12 @@ impl atp::client::Observe for AgentObserver {
     fn on_message_request(
         &mut self,
         req: atp::wire::Request<atp::client::MessageParams>,
-    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), atp::Error>> + Send + '_>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async move {
             let Some(actor) = self.actor.clone() else {
                 let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                     id: req.id,
-                    error: atp::wire::Error::invalid_request("connect request must be the first ATP frame"),
+                    error: atp::error::invalid_request("connect request must be the first ATP frame"),
                 };
                 self.socket.write(response).await?;
                 self.terminal = true;
@@ -334,7 +317,7 @@ impl atp::client::Observe for AgentObserver {
             if req.method != "message" {
                 let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                     id: req.id,
-                    error: atp::wire::Error::method_not_found(&req.method),
+                    error: atp::error::method_not_found(&req.method),
                 };
                 self.socket.write(response).await?;
                 return Ok(());
@@ -343,7 +326,7 @@ impl atp::client::Observe for AgentObserver {
             if let Err(error) = req.params.validate() {
                 let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                     id: req.id,
-                    error: atp::wire::Error::invalid_params(error),
+                    error: atp::error::invalid_params(error),
                 };
                 self.socket.write(response).await?;
                 return Ok(());
@@ -352,7 +335,7 @@ impl atp::client::Observe for AgentObserver {
             if req.params.reply_to_id.is_some() {
                 let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                     id: req.id,
-                    error: atp::wire::Error::invalid_params("reply_to_id is not supported"),
+                    error: atp::error::invalid_params("reply_to_id is not supported"),
                 };
                 self.socket.write(response).await?;
                 return Ok(());
@@ -370,7 +353,7 @@ impl atp::client::Observe for AgentObserver {
                     tracing::warn!(chat_id = %req.params.chat_id, "agent attempted to send to an unavailable chat");
                     let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                         id: req.id,
-                        error: atp::wire::Error::invalid_params("chat is unavailable for this agent"),
+                        error: atp::error::invalid_params("chat is unavailable for this agent"),
                     };
                     self.socket.write(response).await?;
                     return Ok(());
@@ -379,7 +362,7 @@ impl atp::client::Observe for AgentObserver {
                     tracing::error!(%error, chat_id = %req.params.chat_id, "failed to validate agent chat access");
                     let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                         id: req.id,
-                        error: atp::wire::Error::internal("failed to validate chat access"),
+                        error: atp::error::internal("failed to validate chat access"),
                     };
                     self.socket.write(response).await?;
                     self.terminal = true;
@@ -405,7 +388,7 @@ impl atp::client::Observe for AgentObserver {
                                     Err(error) => {
                                         let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                                             id: req.id,
-                                            error: atp::wire::Error::invalid_params(format!("invalid file URI: {error}")),
+                                            error: atp::error::invalid_params(format!("invalid file URI: {error}")),
                                         };
                                         self.socket.write(response).await?;
                                         return Ok(());
@@ -444,7 +427,7 @@ impl atp::client::Observe for AgentObserver {
                     tracing::error!(%error, trace_id = %req.id, chat_id = %chat.id, "failed to enqueue agent message");
                     let response: atp::wire::Response<atp::server::ServerFrame> = atp::wire::Response::Err {
                         id: req.id,
-                        error: atp::wire::Error::internal("failed to persist message"),
+                        error: atp::error::internal("failed to persist message"),
                     };
                     self.socket.write(response).await?;
                     self.terminal = true;

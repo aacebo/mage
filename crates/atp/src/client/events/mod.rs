@@ -9,7 +9,7 @@ pub enum ClientEvent {
 }
 
 impl ClientEvent {
-    pub fn try_into_stream(self) -> Result<StreamEvent, Box<dyn std::error::Error>> {
+    pub fn try_into_stream(self) -> crate::Result<StreamEvent> {
         match self {
             Self::Stream(v) => Ok(v),
         }

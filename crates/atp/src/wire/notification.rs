@@ -7,7 +7,7 @@ pub struct Notification<T = serde_json::Value> {
 }
 
 impl Notification {
-    pub fn try_cast_into<T>(self) -> Result<Notification<T>, Box<dyn std::error::Error>>
+    pub fn try_cast_into<T>(self) -> crate::Result<Notification<T>>
     where
         T: for<'a> serde::Deserialize<'a>,
     {
@@ -46,7 +46,7 @@ mod tests {
         }))?;
 
         let value: wire::Notification<client::ClientEvent> = frame.try_cast_into()?;
-        let event = value.body.try_stream()?;
+        let event = value.body.clone().try_into_stream()?;
         debug_assert_eq!(event.name(), "stream.status");
         let json = serde_json::to_string(&value)?;
         debug_assert_eq!(
