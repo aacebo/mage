@@ -1,17 +1,18 @@
-pub fn result<T>(items: Vec<T>, limit: usize, id: impl Fn(&T) -> uuid::Uuid) -> QueryResult<T> {
+pub fn result<T, C>(items: Vec<T>, limit: usize, cursor: impl Fn(&T) -> C) -> QueryResult<T, C> {
     let mut result = QueryResult { next: None, items };
 
     if result.items.len() > limit {
-        result.next = result.items.pop().map(|v| id(&v));
+        result.items.pop();
+        result.next = result.items.last().map(cursor);
     }
 
     result
 }
 
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
-pub struct QueryResult<T> {
+pub struct QueryResult<T, C = uuid::Uuid> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub next: Option<uuid::Uuid>,
+    pub next: Option<C>,
 
     #[serde(default)]
     pub items: Vec<T>,

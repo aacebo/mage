@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS task_events (
     id              UUID        PRIMARY KEY,
     tenant_id       UUID        NOT NULL,
     task_id         UUID        NOT NULL,
-    sequence        BIGINT      NOT NULL,
+    sequence        BIGINT      NOT NULL CHECK (sequence > 0),
     type            TEXT        NOT NULL,
     data            JSONB       NOT NULL DEFAULT '{}',
     created_by_id   UUID        NOT NULL REFERENCES actors(id) ON DELETE CASCADE,

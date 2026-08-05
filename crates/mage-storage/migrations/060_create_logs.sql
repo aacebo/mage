@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS logs (
     id              UUID        PRIMARY KEY,
     trace_id        UUID        NOT NULL,
     tenant_id       UUID        NOT NULL,
-    task_id         UUID        REFERENCES tasks(id) ON DELETE CASCADE,
+    task_id         UUID,
     level           TEXT        NOT NULL,
     source          TEXT        NOT NULL,
     message         TEXT        NOT NULL,
@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS logs (
 
     FOREIGN KEY (tenant_id, created_by_id)
         REFERENCES actors (tenant_id, id)
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (tenant_id, task_id)
+        REFERENCES tasks (tenant_id, id)
         ON DELETE CASCADE
 );
 

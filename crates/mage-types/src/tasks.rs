@@ -141,3 +141,29 @@ pub enum TaskEventData {
     Cancelled,
     Custom(String),
 }
+
+impl TaskEventData {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Started => "started",
+            Self::Status => "status",
+            Self::Progress => "progress",
+            Self::TextDelta => "text_delta",
+            Self::Message => "message",
+            Self::Artifact => "artifact",
+            Self::ToolCall => "tool_call",
+            Self::ToolResult => "tool_result",
+            Self::Warning => "warning",
+            Self::Error => "error",
+            Self::Completed => "completed",
+            Self::Cancelled => "cancelled",
+            Self::Custom(_) => "custom",
+        }
+    }
+}
+
+impl std::fmt::Display for TaskEventData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}

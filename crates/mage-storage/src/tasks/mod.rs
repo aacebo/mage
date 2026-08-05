@@ -4,17 +4,26 @@ use sqlx::types::Json;
 
 use crate::QueryResult;
 
+pub mod events;
 pub mod project;
 pub mod query;
 pub use query::Query;
 
 pub struct TaskStorage<'a> {
     pool: &'a PgPool,
+    events: events::TaskEventStorage<'a>,
 }
 
 impl<'a> TaskStorage<'a> {
     pub fn new(pool: &'a PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            events: events::TaskEventStorage::new(pool),
+        }
+    }
+
+    pub fn events(&self) -> &events::TaskEventStorage<'a> {
+        &self.events
     }
 
     pub async fn get_by_id(&self, id: uuid::Uuid) -> Result<Option<mage_types::tasks::Task>> {
@@ -45,15 +54,16 @@ impl<'a> TaskStorage<'a> {
         sqlx::query(
             r#"
             INSERT INTO tasks (
-                id, trace_id, parent_id, chat_id, message_id, agent_id, name,
+                id, trace_id, tenant_id, parent_id, chat_id, message_id, agent_id, name,
                 status, input, output, error, attempts, max_attempts,
                 started_at, ended_at, created_at, updated_at
             )
-            VALUES (
-                $1, $2, $3, $4, $5, $6, $7,
+            SELECT
+                $1, $2, chats.tenant_id, $3, $4, $5, $6, $7,
                 $8, $9, $10, $11, $12, $13,
                 $14, $15, NOW(), NOW()
-            )
+            FROM chats
+            WHERE chats.id = $4
             "#,
         )
         .bind(task.id)
