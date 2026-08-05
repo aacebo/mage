@@ -73,7 +73,7 @@ pub trait Observe: Send {
             match event.body.clone() {
                 StreamEvent::Open(e) => self.on_stream_open_event(event.cast_with(e)).await,
                 StreamEvent::Close(e) => self.on_stream_close_event(event.cast_with(e)).await,
-                StreamEvent::Status(e) => self.on_stream_status_event(event.cast_with(e)).await,
+                StreamEvent::Activity(e) => self.on_stream_activity_event(event.cast_with(e)).await,
                 StreamEvent::Text(e) => self.on_stream_text_event(event.cast_with(e)).await,
             }
         })
@@ -93,9 +93,9 @@ pub trait Observe: Send {
         Box::pin(async { Ok(()) })
     }
 
-    fn on_stream_status_event(
+    fn on_stream_activity_event(
         &mut self,
-        _event: wire::Notification<StreamStatusEvent>,
+        _event: wire::Notification<StreamActivityEvent>,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
         Box::pin(async { Ok(()) })
     }
@@ -197,9 +197,9 @@ mod tests {
             })
         }
 
-        fn on_stream_status_event(
+        fn on_stream_activity_event(
             &mut self,
-            _event: wire::Notification<StreamStatusEvent>,
+            _event: wire::Notification<StreamActivityEvent>,
         ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + '_>> {
             Box::pin(async move {
                 self.statuses += 1;
@@ -246,10 +246,10 @@ mod tests {
         let status = wire::Notification {
             task_id: Some(uuid::Uuid::now_v7()),
             name: "stream.status".to_string(),
-            body: ClientFrame::from(ClientEvent::from(StreamEvent::from(StreamStatusEvent {
+            body: ClientFrame::from(ClientEvent::from(StreamEvent::from(StreamActivityEvent {
                 stream_id: "stream-1".to_string(),
                 sequence: 1,
-                code: StatusCode::Working,
+                phase: StreamPhase::Working,
                 message: "working".to_string(),
             }))),
         };

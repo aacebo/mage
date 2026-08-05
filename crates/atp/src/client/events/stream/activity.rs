@@ -1,14 +1,14 @@
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct StreamStatusEvent {
+pub struct StreamActivityEvent {
     pub stream_id: String,
     pub sequence: usize,
-    pub code: StatusCode,
+    pub phase: StreamPhase,
     pub message: String,
 }
 
 #[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum StatusCode {
+pub enum StreamPhase {
     Thinking,
     Planning,
     Working,

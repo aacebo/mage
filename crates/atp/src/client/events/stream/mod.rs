@@ -1,13 +1,13 @@
 use serde_valid::Validate;
 
+mod activity;
 mod close;
 mod open;
-mod status;
 mod text;
 
+pub use activity::*;
 pub use close::*;
 pub use open::*;
-pub use status::*;
 pub use text::*;
 
 use crate::error;
@@ -16,7 +16,7 @@ use crate::error;
 #[serde(untagged)]
 pub enum StreamEvent {
     Close(StreamCloseEvent),
-    Status(StreamStatusEvent),
+    Activity(StreamActivityEvent),
     Text(StreamTextEvent),
     Open(StreamOpenEvent),
 }
@@ -25,7 +25,7 @@ impl StreamEvent {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Open(_) => "stream.open",
-            Self::Status(_) => "stream.status",
+            Self::Activity(_) => "stream.activity",
             Self::Text(_) => "stream.text",
             Self::Close(_) => "stream.close",
         }
@@ -35,7 +35,7 @@ impl StreamEvent {
         match self {
             Self::Open(v) => &v.stream_id,
             Self::Close(v) => &v.stream_id,
-            Self::Status(v) => &v.stream_id,
+            Self::Activity(v) => &v.stream_id,
             Self::Text(v) => &v.stream_id,
         }
     }
@@ -43,7 +43,7 @@ impl StreamEvent {
     pub fn sequence(&self) -> usize {
         match self {
             Self::Open(v) => v.sequence,
-            Self::Status(v) => v.sequence,
+            Self::Activity(v) => v.sequence,
             Self::Text(v) => v.sequence,
             Self::Close(v) => v.sequence,
         }
@@ -59,9 +59,9 @@ impl StreamEvent {
         }
     }
 
-    pub fn try_into_status(self) -> crate::Result<StreamStatusEvent> {
+    pub fn try_into_activity(self) -> crate::Result<StreamActivityEvent> {
         match self {
-            Self::Status(v) => Ok(v),
+            Self::Activity(v) => Ok(v),
             v => Err(error::invalid_request(format!(
                 "expected `stream.status`, received `{}`",
                 v.name()
@@ -102,9 +102,9 @@ impl From<StreamCloseEvent> for StreamEvent {
     }
 }
 
-impl From<StreamStatusEvent> for StreamEvent {
-    fn from(value: StreamStatusEvent) -> Self {
-        Self::Status(value)
+impl From<StreamActivityEvent> for StreamEvent {
+    fn from(value: StreamActivityEvent) -> Self {
+        Self::Activity(value)
     }
 }
 

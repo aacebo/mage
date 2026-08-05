@@ -36,22 +36,22 @@ mod tests {
     #[test]
     fn serde() -> Result<(), Error> {
         let frame: wire::Notification = serde_json::from_value(serde_json::json!({
-            "name": "stream.status",
+            "name": "stream.activity",
             "body": {
                 "stream_id": "test-123",
                 "sequence": 3,
-                "code": "thinking",
+                "phase": "thinking",
                 "message": "Thinking..."
             }
         }))?;
 
         let value: wire::Notification<client::ClientEvent> = frame.try_cast_into()?;
         let event = value.body.clone().try_into_stream()?;
-        debug_assert_eq!(event.name(), "stream.status");
+        debug_assert_eq!(event.name(), "stream.activity");
         let json = serde_json::to_string(&value)?;
         debug_assert_eq!(
             json,
-            r#"{"name":"stream.status","body":{"stream_id":"test-123","sequence":3,"code":"thinking","message":"Thinking..."}}"#,
+            r#"{"name":"stream.activity","body":{"stream_id":"test-123","sequence":3,"phase":"thinking","message":"Thinking..."}}"#,
             "{json}"
         );
 
