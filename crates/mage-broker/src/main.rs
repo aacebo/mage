@@ -8,13 +8,12 @@ use tower_http::services::ServeDir;
 use tracing_subscriber::EnvFilter;
 
 mod config;
-mod context;
 mod extract;
 mod routes;
+mod state;
 mod ws;
 
 pub use config::{Config, ConsoleConfig};
-pub use context::*;
 
 #[tokio::main]
 async fn main() -> mage_error::Result<()> {
@@ -36,24 +35,22 @@ async fn main() -> mage_error::Result<()> {
         .connect()
         .await?;
 
-    let ctx = Arc::new(Context::new(pool, socket, config.console.clone()));
-    let console = config.console.enabled;
-    tracing::info!(port = config.port, console, "starting broker");
-
+    tracing::info!(port = config.port, "starting broker");
+    let session = Arc::new(state::Session::new(pool, socket, config.clone()));
     let mut app = Router::new()
         .route("/health", axum::routing::get(routes::health::get))
         .nest("/agents", routes::agents::router())
         .nest("/tenants/{tenant_id}", routes::tenants::router());
 
-    if console {
+    if config.console.enabled {
         app = app.nest("/console", routes::console::router());
     }
 
     let static_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static");
     let app = app
         .nest_service("/static", ServeDir::new(static_dir).append_index_html_on_directories(true))
-        .layer(axum::middleware::from_fn_with_state(ctx.clone(), request_middleware))
-        .with_state(ctx);
+        .layer(axum::middleware::from_fn_with_state(session.clone(), state::http::middleware))
+        .with_state(session);
     let app = NormalizePathLayer::trim_trailing_slash().layer(app);
     let app = ServiceExt::<axum::extract::Request>::into_make_service(app);
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", config.port)).await?;

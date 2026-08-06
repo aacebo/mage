@@ -3,7 +3,7 @@ use axum::response::{IntoResponse, Response as HttpResponse};
 use mage_error::Result;
 use serde_valid::Validate;
 
-use crate::{RequestContext, extract};
+use crate::{extract, state};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
 pub(super) struct Request {
@@ -30,12 +30,12 @@ pub(super) struct FromUser {
 }
 
 pub async fn create(
-    ctx: RequestContext,
+    session: state::http::HttpSession,
     Path(tenant_id): Path<uuid::Uuid>,
     body: extract::Json<Request>,
 ) -> Result<HttpResponse> {
     let body = body.into_inner();
-    let from = match ctx
+    let from = match session
         .storage()
         .actors()
         .get_by_external_id(tenant_id, body.from.id.clone())
@@ -43,7 +43,7 @@ pub async fn create(
     {
         Some(actor) => actor,
         None => {
-            let actor = ctx
+            let actor = session
                 .storage()
                 .actors()
                 .create(mage_types::actors::Actor {
@@ -60,13 +60,17 @@ pub async fn create(
                 })
                 .await?;
 
-            ctx.enqueue(actor.tenant_id, "actor.create", actor.clone()).await?;
+            session.enqueue(actor.tenant_id, "actor.create", actor.clone()).await?;
             actor
         }
     };
 
     if let Some(chat_id) = body.chat_id {
-        let chat = ctx.storage().chats().get_open_for_actor(chat_id, tenant_id, from.id).await?;
+        let chat = session
+            .storage()
+            .chats()
+            .get_open_for_actor(chat_id, tenant_id, from.id)
+            .await?;
 
         if chat.is_none() {
             return Err(mage_error::bad_request("chat is unavailable for this sender"));
@@ -82,7 +86,7 @@ pub async fn create(
         sent_by: from.into(),
     };
 
-    ctx.enqueue(message.tenant_id, "message.inbound", message.clone()).await?;
+    session.enqueue(message.tenant_id, "message.inbound", message.clone()).await?;
 
     // 1. create/update actor.
     // 2. create embedding of message content ??.

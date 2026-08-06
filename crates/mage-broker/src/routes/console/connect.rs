@@ -6,7 +6,7 @@ use axum::extract::Query;
 use axum::extract::ws::{CloseCode, CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
 use axum::response::Response;
 
-use crate::RequestContext;
+use crate::state;
 
 const REPLAY_BATCH_SIZE: usize = 100;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(20);
@@ -16,25 +16,25 @@ pub(super) struct ReplayQuery {
     after_id: Option<uuid::Uuid>,
 }
 
-pub async fn connect(ctx: RequestContext, Query(query): Query<ReplayQuery>, upgrade: WebSocketUpgrade) -> Response {
-    let tenant_id = ctx.console().tenant_id.unwrap();
+pub async fn connect(session: state::http::HttpSession, Query(query): Query<ReplayQuery>, upgrade: WebSocketUpgrade) -> Response {
+    let tenant_id = session.config().console.tenant_id.unwrap();
     let cursor = query.after_id;
 
     upgrade
         .max_message_size(64 * 1024)
-        .on_upgrade(move |socket| run_stream(ctx, tenant_id, cursor, socket))
+        .on_upgrade(move |socket| run(session, tenant_id, cursor, socket))
 }
 
 #[tracing::instrument(
     level = "info",
     name = "console.connection",
-    parent = ctx.span(),
-    skip(ctx, socket),
+    parent = session.span(),
+    skip(session, socket),
     fields(tenant_id = %tenant_id, replay_after_id = ?cursor)
 )]
-async fn run_stream(ctx: RequestContext, tenant_id: uuid::Uuid, cursor: Option<uuid::Uuid>, mut socket: WebSocket) {
+async fn run(session: state::http::HttpSession, tenant_id: uuid::Uuid, cursor: Option<uuid::Uuid>, mut socket: WebSocket) {
     let binding = "#".parse().expect("the console event binding is valid");
-    let mut events = match ctx.socket().subscribe(&[binding]).await {
+    let mut events = match session.amqp().subscribe(&[binding]).await {
         Ok(events) => events,
         Err(error) => {
             tracing::error!(%error, "failed to create console AMQP subscription");
@@ -44,7 +44,7 @@ async fn run_stream(ctx: RequestContext, tenant_id: uuid::Uuid, cursor: Option<u
     };
 
     tracing::debug!("created exclusive console AMQP subscription");
-    run_event_stream(&ctx, tenant_id, cursor, socket, &mut events).await;
+    run_event_stream(&session, tenant_id, cursor, socket, &mut events).await;
 
     if let Err(error) = events.cancel().await {
         tracing::warn!(%error, "failed to cancel console AMQP subscription");
@@ -54,7 +54,7 @@ async fn run_stream(ctx: RequestContext, tenant_id: uuid::Uuid, cursor: Option<u
 }
 
 async fn run_event_stream(
-    ctx: &RequestContext,
+    session: &state::http::HttpSession,
     tenant_id: uuid::Uuid,
     mut cursor: Option<uuid::Uuid>,
     mut socket: WebSocket,
@@ -73,7 +73,7 @@ async fn run_event_stream(
             Some(cursor) => query.cursor(cursor),
             None => query,
         };
-        let result = match ctx.storage().events().get(query).await {
+        let result = match session.storage().events().get(query).await {
             Ok(result) => result,
             Err(error) => {
                 tracing::error!(%error, "failed to replay console events");

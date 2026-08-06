@@ -7,46 +7,11 @@ use tokio::sync::RwLock;
 
 use super::*;
 
-pub struct Session {
-    id: uuid::Uuid,
-    sender: tokio::sync::mpsc::WeakUnboundedSender<ws::Message>,
-}
-
-impl Session {
-    pub fn id(&self) -> uuid::Uuid {
-        self.id
-    }
-
-    pub fn send(&self, message: impl Into<ws::Message>) -> Result<(), Error> {
-        self.sender
-            .upgrade()
-            .ok_or_else(|| mage_error::internal("inactive WebSocket"))?
-            .send(message.into())
-            .map_err(mage_error::internal)
-    }
-}
-
-impl From<tokio::sync::mpsc::WeakUnboundedSender<ws::Message>> for Session {
-    fn from(sender: tokio::sync::mpsc::WeakUnboundedSender<ws::Message>) -> Self {
-        Self {
-            id: uuid::Uuid::now_v7(),
-            sender,
-        }
-    }
-}
-
-impl From<tokio::sync::mpsc::UnboundedSender<ws::Message>> for Session {
-    fn from(sender: tokio::sync::mpsc::UnboundedSender<ws::Message>) -> Self {
-        Self {
-            id: uuid::Uuid::now_v7(),
-            sender: sender.downgrade(),
-        }
-    }
-}
+type Sender = tokio::sync::mpsc::WeakUnboundedSender<ws::Message>;
 
 pub struct Pool {
     cursor: AtomicUsize,
-    sessions: Arc<RwLock<Vec<Session>>>,
+    sessions: Arc<RwLock<Vec<Sender>>>,
 }
 
 impl Pool {
@@ -57,14 +22,14 @@ impl Pool {
         }
     }
 
-    pub async fn put(&self, session: impl Into<Session>) {
+    pub async fn put(&self, session: impl Into<Sender>) {
         let mut guard = self.sessions.write().await;
         guard.push(session.into());
     }
 
     pub async fn send(&self, message: impl Into<ws::Message>) -> Result<bool, Error> {
         let mut guard = self.sessions.write().await;
-        guard.retain(|s| s.sender.upgrade().is_some());
+        guard.retain(|s| s.upgrade().is_some());
 
         let mut i = self.cursor.fetch_add(1, Ordering::SeqCst);
 
@@ -78,7 +43,7 @@ impl Pool {
             Some(v) => v,
         };
 
-        let sender = match session.sender.upgrade() {
+        let sender = match session.upgrade() {
             None => return Ok(false),
             Some(v) => v,
         };
@@ -98,12 +63,13 @@ impl Connections {
         Self::default()
     }
 
-    pub async fn register(&self, pool_id: uuid::Uuid, session: impl Into<Session>) {
+    pub async fn register(&self, pool_id: uuid::Uuid, session: impl Into<Sender>) {
         let mut guard = self.pools.write().await;
         let pool = guard.entry(pool_id).or_insert(Pool::new());
         pool.put(session).await;
     }
 
+    #[allow(unused)]
     pub async fn send(&self, pool_id: uuid::Uuid, message: impl Into<ws::Message>) -> Result<(), Error> {
         let mut guard = self.pools.write().await;
         let pool = match guard.get(&pool_id) {

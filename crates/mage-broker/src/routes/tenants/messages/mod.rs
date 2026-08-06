@@ -3,10 +3,10 @@ use std::sync::Arc;
 use axum::Router;
 use axum::routing::post;
 
-use crate::Context;
+use crate::state;
 
 mod create;
 
-pub fn router() -> Router<Arc<Context>> {
+pub fn router() -> Router<Arc<state::Session>> {
     Router::new().route("/", post(create::create))
 }

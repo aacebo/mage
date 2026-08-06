@@ -3,10 +3,6 @@ pub mod session;
 use axum::extract::ws;
 pub use session::*;
 
-fn serialize<T: serde::Serialize>(item: &T) -> Result<Vec<u8>, mage_error::Error> {
-    serde_json::to_vec(item).map_err(|error| mage_error::new("atp_internal", error))
-}
-
 pub struct WebSocket {
     inner: ws::WebSocket,
 }
@@ -41,7 +37,7 @@ impl atp::Socket for WebSocket {
         T: serde::Serialize,
     {
         Box::pin(async move {
-            let bytes = serialize(&item)?;
+            let bytes = serde_json::to_vec(&item)?;
             self.inner
                 .send(ws::Message::Binary(bytes.into()))
                 .await
@@ -70,5 +66,19 @@ impl atp::Socket for WebSocket {
 impl From<ws::WebSocket> for WebSocket {
     fn from(inner: ws::WebSocket) -> Self {
         Self { inner }
+    }
+}
+
+impl std::ops::Deref for WebSocket {
+    type Target = ws::WebSocket;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl std::ops::DerefMut for WebSocket {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }

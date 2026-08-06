@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Response as HttpResponse};
 use mage_error::Result;
 use serde_valid::Validate;
 
-use crate::{RequestContext, extract};
+use crate::{extract, state};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Validate)]
 pub(super) struct Request {
@@ -27,13 +27,13 @@ struct Response<'a> {
 }
 
 pub async fn create(
-    ctx: RequestContext,
+    session: state::http::HttpSession,
     Path(tenant_id): Path<uuid::Uuid>,
     body: extract::Json<Request>,
 ) -> Result<HttpResponse> {
     let body = body.into_inner();
     let secret = mage_types::secret::new();
-    let actor = ctx
+    let actor = session
         .storage()
         .actors()
         .create(mage_types::actors::Actor {
@@ -65,6 +65,6 @@ pub async fn create(
     )
         .into_response();
 
-    ctx.enqueue(actor.tenant_id, "actor.create", actor).await?;
+    session.enqueue(actor.tenant_id, "actor.create", actor).await?;
     Ok(res)
 }

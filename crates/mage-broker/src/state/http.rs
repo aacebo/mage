@@ -2,91 +2,22 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use axum::extract::{FromRequestParts, Request, State};
-use axum::http::HeaderMap;
 use axum::http::request::Parts;
 use axum::middleware::Next;
 use axum::response::Response;
-use chrono::{DateTime, Utc};
-use mage_storage::Storage;
-use sqlx::PgPool;
-
-use crate::{ConsoleConfig, ws};
 
 const REQUEST_ID_HEADER: &str = "X-Request-ID";
 
 #[derive(Clone)]
-pub struct Context {
-    pool: PgPool,
-    socket: mage_amqp::Socket,
-    start_time: DateTime<Utc>,
-    console: ConsoleConfig,
-    connections: ws::Connections,
-}
-
-impl Context {
-    pub fn new(pool: PgPool, socket: mage_amqp::Socket, console: ConsoleConfig) -> Self {
-        Self {
-            pool,
-            socket,
-            start_time: Utc::now(),
-            console,
-            connections: ws::Connections::new(),
-        }
-    }
-
-    pub fn start_time(&self) -> DateTime<Utc> {
-        self.start_time
-    }
-
-    pub fn storage(&self) -> Storage<'_> {
-        Storage::new(&self.pool)
-    }
-
-    pub fn pool(&self) -> &PgPool {
-        &self.pool
-    }
-
-    pub fn socket(&self) -> &mage_amqp::Socket {
-        &self.socket
-    }
-
-    pub fn console(&self) -> &ConsoleConfig {
-        &self.console
-    }
-
-    pub fn connections(&self) -> &ws::Connections {
-        &self.connections
-    }
-}
-
-#[derive(Clone)]
-pub struct RequestContext {
-    ctx: Arc<Context>,
-    headers: HeaderMap,
+pub struct HttpSession {
     request_id: uuid::Uuid,
+    parent: Arc<super::Session>,
     span: tracing::Span,
 }
 
-impl RequestContext {
-    pub fn new(ctx: Arc<Context>, headers: HeaderMap, request_id: uuid::Uuid, span: tracing::Span) -> Self {
-        Self {
-            ctx,
-            headers,
-            request_id,
-            span,
-        }
-    }
-
-    pub fn context(&self) -> &Context {
-        &self.ctx
-    }
-
-    pub fn headers(&self) -> &HeaderMap {
-        &self.headers
-    }
-
-    pub fn request_id(&self) -> &uuid::Uuid {
-        &self.request_id
+impl HttpSession {
+    pub fn parent(&self) -> &super::Session {
+        &self.parent
     }
 
     pub fn span(&self) -> &tracing::Span {
@@ -132,6 +63,7 @@ impl RequestContext {
         let task_id = data.task_id();
         let event = mage_types::events::new(tenant_id, trace_id, key, data);
         let span = tracing::Span::current();
+
         span.record("event_id", tracing::field::display(event.id));
         span.record("actor_id", tracing::field::debug(actor_id));
         span.record("chat_id", tracing::field::debug(chat_id));
@@ -153,7 +85,7 @@ impl RequestContext {
 
         tracing::debug!("persisted event");
 
-        if let Err(error) = self.socket.produce().enqueue(event.clone()).await {
+        if let Err(error) = self.amqp.produce().enqueue(event.clone()).await {
             tracing::error!(%error, "failed to publish event to RabbitMQ");
             return Err(error);
         }
@@ -163,7 +95,7 @@ impl RequestContext {
     }
 }
 
-impl<S> FromRequestParts<S> for RequestContext
+impl<S> FromRequestParts<S> for HttpSession
 where
     S: Send + Sync,
 {
@@ -172,19 +104,19 @@ where
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let ctx = parts
             .extensions
-            .get::<RequestContext>()
+            .get::<HttpSession>()
             .cloned()
-            .expect("RequestContext not found in request extensions");
+            .expect("HttpSession not found in request extensions");
 
         Ok(ctx)
     }
 }
 
-impl std::ops::Deref for RequestContext {
-    type Target = Context;
+impl std::ops::Deref for HttpSession {
+    type Target = super::Session;
 
     fn deref(&self) -> &Self::Target {
-        self.context()
+        self.parent()
     }
 }
 
@@ -200,7 +132,7 @@ impl std::ops::Deref for RequestContext {
         elapsed_ms = tracing::field::Empty,
     )
 )]
-pub async fn request_middleware(State(ctx): State<Arc<Context>>, mut request: Request, next: Next) -> Response {
+pub async fn middleware(State(parent): State<Arc<super::Session>>, mut request: Request, next: Next) -> Response {
     let method = request.method().clone();
     let path = request.uri().path().to_string();
     let headers = request.headers().clone();
@@ -209,14 +141,17 @@ pub async fn request_middleware(State(ctx): State<Arc<Context>>, mut request: Re
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse().ok())
         .unwrap_or_else(uuid::Uuid::now_v7);
+
     let span = tracing::Span::current();
     span.record("request_id", tracing::field::display(request_id));
     span.record("method", tracing::field::display(&method));
     span.record("path", tracing::field::display(&path));
 
-    request
-        .extensions_mut()
-        .insert(RequestContext::new(ctx, headers, request_id, span.clone()));
+    request.extensions_mut().insert(HttpSession {
+        parent,
+        request_id,
+        span: span.clone(),
+    });
 
     let started_at = Instant::now();
     tracing::debug!("request started");

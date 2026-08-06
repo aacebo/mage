@@ -1,15 +1,15 @@
 use axum::Json;
 use serde::Serialize;
 
-use crate::RequestContext;
+use crate::state;
 
 #[derive(Serialize)]
 pub(crate) struct IndexResponse {
-    start_time: String,
+    started_at: String,
 }
 
-pub async fn get(ctx: RequestContext) -> Json<IndexResponse> {
+pub async fn get(ctx: state::http::HttpSession) -> Json<IndexResponse> {
     Json(IndexResponse {
-        start_time: ctx.start_time().to_rfc3339(),
+        started_at: ctx.started_at().to_rfc3339(),
     })
 }
