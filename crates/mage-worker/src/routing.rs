@@ -1,11 +1,11 @@
 #[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize, serde::Serialize)]
-pub struct RoutingPolicy {
+pub struct Policy {
     pub candidate_limit: u32,
     pub min_confidence: f64,
     pub ambiguity_margin: f64,
 }
 
-impl RoutingPolicy {
+impl Policy {
     const SCORE_EPSILON: f64 = 1e-12;
 
     pub fn new(candidate_limit: u32, min_confidence: f64, ambiguity_margin: f64) -> mage_error::Result<Self> {
@@ -39,21 +39,21 @@ impl RoutingPolicy {
         Ok(())
     }
 
-    pub fn decide<T: Clone>(&self, mut candidates: Vec<mage_storage::SearchResult<T>>) -> RoutingDecision<T> {
+    pub fn decide<T: Clone>(&self, mut candidates: Vec<mage_storage::SearchResult<T>>) -> Decision<T> {
         candidates.retain(|candidate| candidate.similarity.is_finite());
         candidates.sort_by(|a, b| b.similarity.total_cmp(&a.similarity));
         candidates.truncate(self.candidate_limit as usize);
 
         let Some(top) = candidates.first() else {
-            return RoutingDecision::NoRoute {
-                reason: NoRouteReason::NoCandidates,
+            return Decision::NoRoute {
+                reason: Reason::NoCandidates,
                 candidates,
             };
         };
 
         if top.similarity < self.min_confidence {
-            return RoutingDecision::NoRoute {
-                reason: NoRouteReason::LowConfidence,
+            return Decision::NoRoute {
+                reason: Reason::LowConfidence,
                 candidates,
             };
         }
@@ -71,11 +71,11 @@ impl RoutingPolicy {
                 .cloned(),
         );
 
-        RoutingDecision::Selected { agents, candidates }
+        Decision::Selected { agents, candidates }
     }
 }
 
-impl Default for RoutingPolicy {
+impl Default for Policy {
     fn default() -> Self {
         Self {
             candidate_limit: 5,
@@ -86,12 +86,12 @@ impl Default for RoutingPolicy {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NoRouteReason {
+pub enum Reason {
     NoCandidates,
     LowConfidence,
 }
 
-impl NoRouteReason {
+impl Reason {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::NoCandidates => "no_candidates",
@@ -101,13 +101,13 @@ impl NoRouteReason {
 }
 
 #[derive(Debug, Clone)]
-pub enum RoutingDecision<T> {
+pub enum Decision<T> {
     Selected {
         agents: Vec<mage_storage::SearchResult<T>>,
         candidates: Vec<mage_storage::SearchResult<T>>,
     },
     NoRoute {
-        reason: NoRouteReason,
+        reason: Reason,
         candidates: Vec<mage_storage::SearchResult<T>>,
     },
 }

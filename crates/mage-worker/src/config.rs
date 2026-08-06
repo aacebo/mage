@@ -1,11 +1,13 @@
 use std::env;
 
+use crate::routing;
+
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct Config {
     pub port: u16,
     pub database_url: String,
     pub rabbitmq_url: String,
-    pub routing: crate::RoutingPolicy,
+    pub routing: routing::Policy,
 }
 
 impl Config {
@@ -20,7 +22,7 @@ impl Config {
         let candidate_limit = parse_env("ROUTING_CANDIDATE_LIMIT", "5")?;
         let min_confidence = parse_env("ROUTING_MIN_CONFIDENCE", "0.20")?;
         let ambiguity_margin = parse_env("ROUTING_AMBIGUITY_MARGIN", "0.05")?;
-        let routing = crate::RoutingPolicy::new(candidate_limit, min_confidence, ambiguity_margin)?;
+        let routing = routing::Policy::new(candidate_limit, min_confidence, ambiguity_margin)?;
 
         Ok(Self {
             port,

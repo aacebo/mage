@@ -8,7 +8,6 @@ mod routing;
 
 pub use config::Config;
 pub use context::Context;
-pub use routing::*;
 
 use crate::context::EventContext;
 
@@ -45,7 +44,6 @@ async fn main() -> mage_error::Result<()> {
 
         let ctx = Context::new(&pool, &socket, config.routing);
         let ctx = EventContext::new(&ctx, &delivery, &event);
-
         let _ = events::run(&ctx).await;
     }
 

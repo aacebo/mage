@@ -4,16 +4,18 @@ use chrono::{DateTime, Utc};
 use mage_storage::Storage;
 use sqlx::PgPool;
 
+use crate::routing;
+
 #[derive(Clone)]
 pub struct Context<'a> {
     pool: &'a PgPool,
     socket: &'a mage_amqp::Socket,
     start_time: DateTime<Utc>,
-    routing: crate::RoutingPolicy,
+    routing: routing::Policy,
 }
 
 impl<'a> Context<'a> {
-    pub fn new(pool: &'a PgPool, socket: &'a mage_amqp::Socket, routing: crate::RoutingPolicy) -> Self {
+    pub fn new(pool: &'a PgPool, socket: &'a mage_amqp::Socket, routing: routing::Policy) -> Self {
         Self {
             pool,
             socket,
@@ -34,7 +36,7 @@ impl<'a> Context<'a> {
         self.pool
     }
 
-    pub fn routing(&self) -> crate::RoutingPolicy {
+    pub fn routing(&self) -> routing::Policy {
         self.routing
     }
 }

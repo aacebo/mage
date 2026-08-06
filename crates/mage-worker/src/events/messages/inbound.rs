@@ -1,4 +1,4 @@
-use crate::context::EventContext;
+use crate::{context::EventContext, routing};
 
 pub async fn run(ctx: &EventContext<'_>, message: &mage_types::chats::InboundMessage) -> mage_error::Result<()> {
     let result: mage_error::Result<Option<usize>> = async {
@@ -60,11 +60,11 @@ pub async fn run(ctx: &EventContext<'_>, message: &mage_types::chats::InboundMes
             .await?;
 
         let selected_agents = match policy.decide(candidates) {
-            crate::RoutingDecision::Selected { agents, candidates } => {
+            routing::Decision::Selected { agents, candidates } => {
                 log_routing_decision(policy, "selected", None, &candidates, &agents);
                 agents
             }
-            crate::RoutingDecision::NoRoute { reason, candidates } => {
+            routing::Decision::NoRoute { reason, candidates } => {
                 log_routing_decision(policy, "no_route", Some(reason.as_str()), &candidates, &[]);
                 return Ok(None);
             }
@@ -130,7 +130,7 @@ pub async fn run(ctx: &EventContext<'_>, message: &mage_types::chats::InboundMes
 }
 
 fn log_routing_decision(
-    policy: crate::RoutingPolicy,
+    policy: routing::Policy,
     outcome: &'static str,
     reason: Option<&'static str>,
     candidates: &[mage_storage::SearchResult<mage_types::actors::Actor>],
