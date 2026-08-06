@@ -617,7 +617,12 @@
                 socket.onmessage = async (message) => {
                     try {
                         const frame = await decodeWebSocketJson(message.data);
-                        if (!frame.id) throw new Error("ATP response has no request id");
+                        if (!frame || typeof frame !== "object") throw new Error("Invalid ATP frame");
+                        if (!frame.id) {
+                            if (!frame.name || !("body" in frame)) throw new Error("Invalid ATP frame");
+                            this.notice = `Received · ${frame.name}`;
+                            return;
+                        }
 
                         if (frame.error) {
                             const detail = frame.error.message || `ATP error ${frame.error.code}`;
@@ -674,7 +679,6 @@
                     };
                 }
                 return {
-                    tenant_id: config.tenant_id,
                     subject: this.subject || null,
                     content,
                     metadata,
@@ -814,13 +818,12 @@
                     } else {
                         payload = {
                             ...payload,
-                            tenant_id: config.tenant_id,
                             from: payload.from || {
                                 id: this.userExternalId,
                                 name: this.userName,
                             },
                         };
-                        const response = await fetch("/messages", {
+                        const response = await fetch(`/tenants/${encodeURIComponent(config.tenant_id)}/messages`, {
                             method: "POST",
                             headers: {
                                 "Content-Type": "application/json",

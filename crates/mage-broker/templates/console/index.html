@@ -134,7 +134,13 @@
                     <span class="agent-avatar small" :class="agentStatus === 'connected' ? 'online' : 'offline'">WS</span>
                     <div>
                         <strong x-text="agents.find(agent => agent.id === selectedAgentId)?.name || 'No agent selected'"></strong>
-                        <small x-text="agentStatus === 'connected' ? 'Authenticated WebSocket' : 'Connect the agent socket to send'"></small>
+                        <small
+                            x-text="agentStatus !== 'connected'
+                                ? 'Connect the agent socket to send'
+                                : currentChatId()
+                                    ? 'Authenticated WebSocket'
+                                    : 'Select an existing chat to send as this agent'"
+                        ></small>
                     </div>
                 </div>
 
@@ -199,7 +205,11 @@
                         <button class="button ghost" type="button" x-show="rawMode" @click="formatPayload()">Format</button>
                         <button class="button ghost" type="button" @click="copyPayload()">Copy payload</button>
                     </div>
-                    <button class="button primary send" type="submit">
+                    <button
+                        class="button primary send"
+                        type="submit"
+                        :disabled="senderMode === 'agent' && (!currentChatId() || agentStatus !== 'connected')"
+                    >
                         Send message
                         <kbd>⌘↵</kbd>
                     </button>
